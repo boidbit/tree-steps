@@ -8,7 +8,7 @@ A 3D tree that grows with the steps you walk. Drag to rotate, pinch to zoom, or 
 
 ## Get the APK
 
-Every push to `main` builds a debug APK. Open the repo's **Actions** tab, pick the latest **Build APK** run and download `tree-steps-debug-apk` from the Artifacts section. You can also start a build by hand with **Run workflow**.
+Every push to `main` builds a debug APK and publishes it in the repo's **Releases** tab (newest build on top, file `app-debug.apk`). It is also kept as a `tree-steps-debug-apk` artifact on the run in the **Actions** tab. You can start a build by hand with **Run workflow**.
 
 Installing it means allowing "install unknown apps" for your browser or file manager. It is a debug build, not signed for the Play Store.
 
