@@ -5,6 +5,18 @@ A 3D tree that grows with the steps you walk. Drag to rotate, pinch to zoom, or 
 - `Tree3D.html` — the 3D tree (the app's home screen)
 - `Seed Wallpapers.html` — the 2D seeded wallpaper generator
 - `lib/` — Three.js and OrbitControls, bundled so the app works offline
+- `android/` — the Capacitor Android project, with the native parts in `app/src/main/java/com/boidbit/treesteps/`:
+  - `TreeStepsPlugin` — real steps, set-as-wallpaper and opening the live wallpaper picker, called from `Tree3D.html`
+  - `StepStore` — turns the phone's step counter into "steps today" and keeps the tree settings
+  - `TreeWallpaperService`, `TreeModel`, `TreeRenderer` — the live wallpaper (same tree as the app for a seed)
+
+## In the Android app
+
+- **Use my steps** asks for the "Physical activity" permission, then the tree grows with the steps you walk today (capped at 10,000).
+- **Set as wallpaper** saves the current view as a still image on the home screen, lock screen or both.
+- **Live wallpaper** opens Android's wallpaper screen for the Tree Steps live wallpaper. It grows with your steps, turns when you tilt the phone or swipe between home pages, and only redraws when something changes.
+
+Steps count from the first time you turn them on; Android's step counter cannot report steps from before that.
 
 ## Get the APK
 

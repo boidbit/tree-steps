@@ -11,4 +11,6 @@ fs.mkdirSync(out, { recursive: true });
 fs.copyFileSync(path.join(root, 'Tree3D.html'), path.join(out, 'index.html'));
 fs.copyFileSync(path.join(root, 'Seed Wallpapers.html'), path.join(out, 'wallpapers.html'));
 fs.cpSync(path.join(root, 'lib'), path.join(out, 'lib'), { recursive: true });
+// Capacitor's browser bundle lets the page call the app's native code (steps, wallpaper)
+fs.copyFileSync(path.join(root, 'node_modules/@capacitor/core/dist/capacitor.js'), path.join(out, 'lib', 'capacitor.js'));
 console.log('www/ ready:', fs.readdirSync(out).join(', '));

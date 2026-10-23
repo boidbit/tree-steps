@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Tree Steps</string>
+    <string name="title_activity_main">Tree Steps</string>
+    <string name="package_name">com.boidbit.treesteps</string>
+    <string name="custom_url_scheme">com.boidbit.treesteps</string>
+    <string name="wallpaper_description">A 3D tree that grows with the steps you walk today. Tilt your phone to look around it.</string>
+</resources>

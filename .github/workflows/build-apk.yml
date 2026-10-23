@@ -31,10 +31,8 @@ jobs:
       - name: Copy web files into www/
         run: npm run build:www
 
-      - name: Create the Android project
-        run: |
-          npx cap add android
-          npx cap sync android
+      - name: Copy web files into the Android project
+        run: npx cap sync android
 
       - name: Build debug APK
         working-directory: android
