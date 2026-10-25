@@ -49,6 +49,7 @@ final class StepStore {
         if (savedDay == null) {
             base = raw;                                     // first reading ever: count from now
         } else if (!day.equals(savedDay)) {
+            saveDay(p, savedDay, p.getInt("steps", 0));     // yesterday's total goes into the history
             base = (last >= 0 && raw >= last) ? last : 0;   // new day (counter reset to 0 if the phone rebooted)
         } else if (last >= 0 && raw < last) {
             base = base - last;                             // rebooted today: keep the steps already walked
@@ -57,6 +58,32 @@ final class StepStore {
         p.edit().putString("day", day).putLong("base", base).putLong("last", raw).putInt("steps", steps).apply();
         return steps;
     }
+
+    private static final int HISTORY_DAYS = 60;
+
+    /** History is kept as "yyyyMMdd:steps,..." newest first. */
+    private static void saveDay(SharedPreferences p, String day, int steps) {
+        StringBuilder out = new StringBuilder(day).append(':').append(steps);
+        int kept = 1;
+        for (String e : p.getString("history", "").split(",")) {
+            if (e.isEmpty() || e.startsWith(day + ":")) continue;
+            if (kept++ >= HISTORY_DAYS) break;
+            out.append(',').append(e);
+        }
+        p.edit().putString("history", out.toString()).apply();
+    }
+
+    /** Finished days, newest first, as {yyyyMMdd, steps}. Today is not included. */
+    static java.util.List<String[]> history(Context c) {
+        java.util.List<String[]> out = new java.util.ArrayList<>();
+        for (String e : prefs(c).getString("history", "").split(",")) {
+            int i = e.indexOf(':');
+            if (i > 0) out.add(new String[] { e.substring(0, i), e.substring(i + 1) });
+        }
+        return out;
+    }
+
+    static String todayKey() { return today(); }
 
     /** Today's steps from the last reading, without touching the sensor. */
     static int lastKnown(Context c) {
@@ -114,8 +141,8 @@ final class StepStore {
 
     static int seed(Context c) { return prefs(c).getInt("seed", 48213); }
     static String palette(Context c) { return prefs(c).getString("pal", "Sunset"); }
-    /** oak | sakura | maple | pine | jacaranda | banyan (see ArtRenderer) */
-    static String design(Context c) { return prefs(c).getString("design", "oak"); }
+    /** banyan | oak | sakura | maple | pine | jacaranda (see ArtRenderer) */
+    static String design(Context c) { return prefs(c).getString("design", "banyan"); }
     static boolean useRealSteps(Context c) { return prefs(c).getBoolean("use_real", false); }
     static int manualSteps(Context c) { return prefs(c).getInt("manual_steps", 6000); }
     static int goal(Context c) { return Math.max(1000, prefs(c).getInt("goal", 10000)); }
@@ -127,6 +154,6 @@ final class StepStore {
     static String labelSize(Context c) { return prefs(c).getString("label_size", "m"); }
     static int intervalMin(Context c) { return Math.max(1, prefs(c).getInt("interval_min", 15)); }
     static boolean tilt(Context c) { return prefs(c).getBoolean("tilt", false); }
-    /** time | sunset */
+    /** time (follow the sun) | dawn | day | sunset | night */
     static String skyMode(Context c) { return prefs(c).getString("sky_mode", "time"); }
 }

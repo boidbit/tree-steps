@@ -15,14 +15,17 @@ An illustrated tree that grows with the steps you walk, in the app and as a live
 
 ## In the Android app
 
-The first launch walks through three screens: what the app does, allowing step counting ("Physical activity"), and setting the live wallpaper. After that the home screen shows today's steps against your goal and a **Set as live wallpaper** button. The gear opens **Settings**:
+The first launch walks through three screens: what the app does, allowing step counting ("Physical activity"), and setting the live wallpaper. After that the home screen shows today's steps against your goal with the tree's growth stage, distance (average 0.76 m stride), calories (0.04 kcal a step), walking minutes (about 100 steps a minute), a seven-day chart, the goal streak, and a **Set as live wallpaper** button. Finished days are saved on the phone (last 60), so the chart and streak fill in from the day you start. Back closes settings or 3D first; pressing back twice exits.
+
+The gear opens **Settings** (light theme, with a live preview of the wallpaper at the top):
 
 | Section | Settings |
 |---|---|
 | Steps | Count my real steps · Daily goal (5k–15k; the tree is fully grown at the goal) · Preview steps (when real steps are off) |
-| Wallpaper | Update the tree: **Live** (grows as you walk while the wallpaper is on screen) or every 5 / 15 / 30 / 60 minutes (checks steps when you unlock, then on that interval) · Tilt to look around (parallax) · Sky: follows the sun or always sunset |
+| Wallpaper | Update the tree: **Live** (grows as you walk while the wallpaper is on screen) or every 5 / 15 / 30 / 60 minutes (checks steps when you unlock, then on that interval) · Tilt to look around (parallax) |
 | Step counter on the wallpaper | Style: off, steps, steps / goal, progress bar, percent · Position: under the tree or bottom · Size |
-| Tree | Design: Oak (hills), Sakura (lake), Maple (autumn), Pine (snow), Jacaranda (fields), Banyan (aerial roots) · New tree (a different shape) · Preview growth |
+| Tree | Design: Banyan (India, the default: fused trunk, aerial and pillar roots, figs), Oak, Sakura, Maple, Pine, Jacaranda · New tree (a different shape) · Preview growth |
+| Sky | Follow the sun (real position for the time zone) or a fixed Dawn, Day, Sunset or Night |
 
 The wallpaper never runs while it is hidden. In interval mode it reads the step counter once when it becomes visible and then every N minutes; tilt uses the accelerometer only when switched on.
 

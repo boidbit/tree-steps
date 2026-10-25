@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -99,6 +100,22 @@ public class TreeStepsPlugin extends Plugin {
         r.put("tilt", StepStore.tilt(c));
         r.put("skyMode", StepStore.skyMode(c));
         r.put("hasSensor", StepStore.hasStepSensor(c));
+        call.resolve(r);
+    }
+
+    /** Finished days (newest first) plus today's key, for the week chart and the streak. */
+    @PluginMethod
+    public void getHistory(PluginCall call) {
+        JSArray days = new JSArray();
+        for (String[] d : StepStore.history(getContext())) {
+            JSObject o = new JSObject();
+            o.put("day", d[0]);
+            o.put("steps", Integer.parseInt(d[1]));
+            days.put(o);
+        }
+        JSObject r = new JSObject();
+        r.put("today", StepStore.todayKey());
+        r.put("days", days);
         call.resolve(r);
     }
 

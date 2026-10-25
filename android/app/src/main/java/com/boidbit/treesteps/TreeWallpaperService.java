@@ -204,7 +204,7 @@ public class TreeWallpaperService extends WallpaperService {
                     ArtRenderer.Label label = realSteps && !"off".equals(labelStyle)
                         ? new ArtRenderer.Label(labelStyle, labelPos, labelSize, steps, goal) : null;
                     renderer.draw(c, width, height, seed, design, steps / (double) Math.max(1, goal), System.currentTimeMillis(),
-                        "sunset".equals(skyMode), par, label);
+                        skyMode, par, label);
                 }
             } catch (RuntimeException ignored) {
                 // surface went away mid-frame; the next visibility change redraws

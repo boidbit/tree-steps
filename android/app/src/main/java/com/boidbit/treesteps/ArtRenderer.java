@@ -71,6 +71,14 @@ final class ArtRenderer {
     private static final String[] SKY_MORN = { "#2d4078", "#6b6aa6", "#d99aac", "#f6c4a4", "#fde3c4" };
     private static final String[] SKY_NIGHT = { "#02040c", "#060d24", "#0e1a3a", "#182a52", "#22375f" };
     private static final double[] WARM = hex("#ff9a5c"), NIGHTC = hex("#101c3c"), WHITE = { 255, 255, 255 };
+    /* fixed looks {elevation, azimuth} for when the user picks a style instead of following the sun */
+    private static final Map<String, double[]> SKY_STYLES = new HashMap<>();
+    static {
+        SKY_STYLES.put("dawn", new double[] { 5, 105 });
+        SKY_STYLES.put("day", new double[] { 48, 160 });
+        SKY_STYLES.put("sunset", new double[] { 4, 255 });
+        SKY_STYLES.put("night", new double[] { -25, 300 });
+    }
 
     /** How today's steps are shown (chosen in the app's settings). */
     static final class Label {
@@ -98,15 +106,16 @@ final class ArtRenderer {
     private String treeKey;
     private ArrayList<Seg> segs;
     private int levels;
+    private double lenGrow;
 
     /**
      * @param growth steps / goal
      * @param nowMs  current time; the sun is placed from it and the phone's time zone
-     * @param sunset true to always use the golden-hour look
+     * @param skyStyle "time" to follow the real sun, or a fixed "dawn" | "day" | "sunset" | "night"
      */
-    void draw(Canvas c, int W, int H, int seed, String designId, double growth, long nowMs, boolean sunset, double par, Label label) {
+    void draw(Canvas c, int W, int H, int seed, String designId, double growth, long nowMs, String skyStyle, double par, Label label) {
         Design dz = DESIGNS.get(designId);
-        if (dz == null) dz = DESIGNS.get("oak");
+        if (dz == null) dz = DESIGNS.get("banyan");
         String[] sc = SCENES.get(dz.scene);
         double k = H / 2400.0, sx = W / 1080.0, t = clamp01(growth);
         paint.setShader(null);
@@ -114,7 +123,8 @@ final class ArtRenderer {
 
         /* ---- where the sun is, and what light that gives ---- */
         double[] sun, pl;
-        if (sunset) { sun = new double[] { 4, 255 }; pl = new double[] { 20, 0 }; }
+        double[] fixed = SKY_STYLES.get(skyStyle);
+        if (fixed != null) { sun = fixed; pl = new double[] { 20, 0 }; }
         else {
             TimeZone tz = TimeZone.getDefault();
             pl = TZ.get(tz.getID());
@@ -290,56 +300,45 @@ final class ArtRenderer {
         else {
             int L = levels;
             double P = 0.9 + t * (L + 0.25), thin = 0.5 + 0.5 * Math.min(1, t * 1.5);
-            ArrayList<double[]> clusters = new ArrayList<>(), tips = new ArrayList<>();
+            boolean banyan = dz.tree.equals("banyan");
+            ArrayList<double[]> clusters = new ArrayList<>();
+            ArrayList<Limb> geo = new ArrayList<>();
             for (int si = 0; si < segs.size(); si++) {
                 Seg s = segs.get(si);
                 double gg = clamp01(P - s.d);
                 if (gg <= 0) continue;
                 double X0 = bx0 + s.x0 * tk, Y0 = by0 + s.y0 * tk, CX = bx0 + s.cx * tk, CY = by0 + s.cy * tk, X1 = bx0 + s.x1 * tk, Y1 = by0 + s.y1 * tk;
                 // grow along the curve: split the quadratic at gg
-                double qx = X0 + (CX - X0) * gg, qy = Y0 + (CY - Y0) * gg;
-                double ex = (1 - gg) * (1 - gg) * X0 + 2 * (1 - gg) * gg * CX + gg * gg * X1, ey = (1 - gg) * (1 - gg) * Y0 + 2 * (1 - gg) * gg * CY + gg * gg * Y1;
+                Limb g = new Limb();
+                g.s = s; g.si = si; g.gg = gg; g.X0 = X0; g.Y0 = Y0;
+                g.qx = X0 + (CX - X0) * gg; g.qy = Y0 + (CY - Y0) * gg;
+                g.ex = (1 - gg) * (1 - gg) * X0 + 2 * (1 - gg) * gg * CX + gg * gg * X1;
+                g.ey = (1 - gg) * (1 - gg) * Y0 + 2 * (1 - gg) * gg * CY + gg * gg * Y1;
                 double w0 = s.w * tk * thin, w1 = w0 * (1 - 0.3 * gg);
-                double dx = ex - X0, dy = ey - Y0, ln = Math.hypot(dx, dy);
+                double dx = g.ex - X0, dy = g.ey - Y0, ln = Math.hypot(dx, dy);
                 if (ln == 0) ln = 1;
-                double nx = -dy / ln, ny = dx / ln, a = w0 / 2, b = w1 / 2, mm = (a + b) / 2;
-                paint.setColor(argb(trunk, 1));
-                path.reset();
-                path.moveTo((float) (X0 + nx * a), (float) (Y0 + ny * a));
-                path.quadTo((float) (qx + nx * mm), (float) (qy + ny * mm), (float) (ex + nx * b), (float) (ey + ny * b));
-                path.lineTo((float) (ex - nx * b), (float) (ey - ny * b));
-                path.quadTo((float) (qx - nx * mm), (float) (qy - ny * mm), (float) (X0 - nx * a), (float) (Y0 - ny * a));
-                path.close();
-                c.drawPath(path, paint);
-                c.drawCircle((float) ex, (float) ey, (float) b, paint);
-                if (s.d < 3) {
-                    // lit edge on the sun's side, and two bark lines
-                    double side = nx * sunSide >= 0 ? 1 : -1;
-                    stroke(argb(rim, 0.75), Math.max(2 * k, a * 0.35));
-                    curve(c, X0 + nx * a * 0.7 * side, Y0 + ny * a * 0.7 * side, qx + nx * mm * 0.7 * side, qy + ny * mm * 0.7 * side, ex + nx * b * 0.7 * side, ey + ny * b * 0.7 * side);
-                    stroke(argb(bark, 0.7), Math.max(1.5 * k, a * 0.08));
-                    for (int bl = -1; bl <= 1; bl += 2) {
-                        curve(c, X0 + nx * a * 0.25 * bl, Y0 + ny * a * 0.25 * bl, qx + nx * mm * 0.3 * bl, qy + ny * mm * 0.3 * bl, ex + nx * b * 0.25 * bl, ey + ny * b * 0.25 * bl);
-                    }
-                    paint.setStyle(Paint.Style.FILL);
-                }
-                tips.add(new double[] { ex, ey, si, gg });
+                g.a = w0 / 2; g.b = w1 / 2; g.nx = -dy / ln; g.ny = dx / ln;
+                geo.add(g);
                 // leaves sit on the outer twigs, and on whatever tip is growing right now (so a young plant has leaves)
                 boolean frontier = s.d == L || P - (s.d + 1) < 0.35;
-                if ((s.d >= Math.max(2, Math.floor(P) - 2) || frontier) && gg > 0.15) clusters.add(new double[] { ex, ey, si, gg });
+                if ((s.d >= Math.max(2, Math.floor(P) - 2) || frontier) && gg > 0.15) clusters.add(new double[] { g.ex, g.ey, si, gg });
             }
-            if (dz.tree.equals("banyan")) {
-                // aerial roots hang from the big branches as the tree matures
-                for (double[] tp : tips) {
-                    Seg s = segs.get((int) tp[2]);
-                    if ((s.d != 2 && s.d != 3) || tp[3] < 1 || s.r > t * 0.9) continue;
-                    double x0 = tp[0], y0 = tp[1], y1 = hillY(x0, hillDx, W, k) + 6 * k;
-                    stroke(argb(scale(trunk, 1.15), 0.9), (3 + s.r * 4) * k);
-                    curve(c, x0, y0, x0 + (s.r - 0.5) * 30 * k, (y0 + y1) / 2, x0 + (s.r - 0.5) * 12 * k, y1);
-                }
-                paint.setStyle(Paint.Style.FILL);
-            }
-            drawCrown(c, k, tk, clusters, leaf, t, sunSide, dz);
+            // soft shadow on the ground under the crown
+            double shR = (120 + 260 * t) * tk;
+            c.save();
+            c.translate((float) bx0, (float) (by0 + 8 * k));
+            c.scale(1, 0.16f);
+            paint.setColor(0xff000000);
+            paint.setShader(new RadialGradient(0, 0, (float) shR, argb(new double[] { 10, 16, 10 }, 0.35 * light), argb(new double[] { 10, 16, 10 }, 0), Shader.TileMode.CLAMP));
+            c.drawCircle(0, 0, (float) shR, paint);
+            paint.setShader(null);
+            c.restore();
+            // far side of the crown goes behind the branches, so some branches cross in front of leaves
+            drawCanopy(c, tk, clusters, leaf, t, sunSide, dz, true);
+            for (Limb g : geo) drawLimb(c, k, g, trunk, bark, rim, sunSide, banyan);
+            if (banyan) drawRoots(c, k, tk, geo, t, trunk, bark, hillDx, W);
+            drawCanopy(c, tk, clusters, leaf, t, sunSide, dz, false);
+            drawBlooms(c, k, tk, clusters, leaf, t, dz);
         }
 
         /* falling petals / leaves, or snow */
@@ -372,9 +371,107 @@ final class ArtRenderer {
         if (label != null) drawLabel(c, W, k, label, leaf);
     }
 
-    /* crown: dark inner mass, mid leaves around it, light leaves on the sun side, then flowers */
-    private void drawCrown(Canvas c, double k, double tk, ArrayList<double[]> clusters, double[][] leaf, double t, double sunSide, Design dz) {
-        double leafy = 0.45 + 0.55 * t;
+    /** One grown limb, ready to draw. */
+    private static final class Limb {
+        Seg s;
+        int si;
+        double gg, X0, Y0, qx, qy, ex, ey, a, b, nx, ny;
+    }
+
+    /* a tapered, bent limb; off shifts it sideways and twist pushes its bend (both in half-widths), wf scales its width */
+    private void taper(Canvas c, Limb g, double off, double twist, double wf) {
+        double nx = g.nx, ny = g.ny, a = g.a * wf, b = g.b * wf, mm = (a + b) / 2;
+        double ox = nx * g.a * off, oy = ny * g.a * off, tx = nx * g.a * twist, ty = ny * g.a * twist;
+        path.reset();
+        path.moveTo((float) (g.X0 + ox + nx * a), (float) (g.Y0 + oy + ny * a));
+        path.quadTo((float) (g.qx + ox + tx + nx * mm), (float) (g.qy + oy + ty + ny * mm), (float) (g.ex + ox * 0.5 + nx * b), (float) (g.ey + oy * 0.5 + ny * b));
+        path.lineTo((float) (g.ex + ox * 0.5 - nx * b), (float) (g.ey + oy * 0.5 - ny * b));
+        path.quadTo((float) (g.qx + ox + tx - nx * mm), (float) (g.qy + oy + ty - ny * mm), (float) (g.X0 + ox - nx * a), (float) (g.Y0 + oy - ny * a));
+        path.close();
+        c.drawPath(path, paint);
+    }
+
+    /* trunk and branches: banyan trunks are three fused, twisting strands; thick limbs get a lit edge and bark grooves */
+    private void drawLimb(Canvas c, double k, Limb g, double[] trunk, double[] bark, double[] rim, double sunSide, boolean banyan) {
+        Seg s = g.s;
+        double side = g.nx * sunSide >= 0 ? 1 : -1;
+        paint.setStyle(Paint.Style.FILL);
+        if (banyan && s.d <= 1) {
+            paint.setColor(argb(scale(trunk, side > 0 ? 0.85 : 1.08), 1)); taper(c, g, -0.45, 0.5, 0.55);
+            paint.setColor(argb(scale(trunk, side > 0 ? 1.08 : 0.85), 1)); taper(c, g, 0.45, -0.4, 0.55);
+            paint.setColor(argb(trunk, 1)); taper(c, g, 0, 0.3, 0.6);
+        } else {
+            paint.setColor(argb(trunk, 1)); taper(c, g, 0, 0, 1);
+        }
+        paint.setColor(argb(trunk, 1));
+        c.drawCircle((float) g.ex, (float) g.ey, (float) g.b, paint);
+        if (s.d >= (banyan ? 3 : 2)) return;
+        double mm = (g.a + g.b) / 2;
+        stroke(argb(rim, 0.7), Math.max(2 * k, g.a * 0.3));
+        curve(c, g.X0 + g.nx * g.a * 0.72 * side, g.Y0 + g.ny * g.a * 0.72 * side, g.qx + g.nx * mm * 0.72 * side, g.qy + g.ny * mm * 0.72 * side,
+            g.ex + g.nx * g.b * 0.72 * side, g.ey + g.ny * g.b * 0.72 * side);
+        Rng rb = new Rng(g.si * 97 + 3);
+        int n = banyan ? 14 : 8;
+        for (int i = 0; i < n; i++) {
+            double off = (rb.next() - 0.5) * 1.5, u0 = rb.next() * 0.75, u1 = Math.min(1, u0 + 0.12 + rb.next() * 0.3);
+            boolean dark = rb.next() < 0.65;
+            stroke(dark ? argb(bark, 0.65) : argb(rim, 0.28), Math.max(1.2 * k, g.a * (dark ? 0.07 : 0.05)));
+            path.reset();
+            for (int q = 0; q <= 4; q++) {
+                double u = u0 + (u1 - u0) * q / 4, A = (1 - u) * (1 - u), B = 2 * (1 - u) * u, C = u * u, hw = g.a + (g.b - g.a) * u;
+                float px = (float) (A * g.X0 + B * g.qx + C * g.ex + g.nx * hw * off), py = (float) (A * g.Y0 + B * g.qy + C * g.ey + g.ny * hw * off);
+                if (q == 0) path.moveTo(px, py); else path.lineTo(px, py);
+            }
+            c.drawPath(path, paint);
+        }
+        paint.setStyle(Paint.Style.FILL);
+    }
+
+    /* banyan aerial roots: thin ones hang from the branches, a few thicken into pillar roots as the tree matures */
+    private void drawRoots(Canvas c, double k, double tk, ArrayList<Limb> geo, double t, double[] trunk, double[] bark, double hillDx, int W) {
+        for (Limb g : geo) {
+            Seg s = g.s;
+            if (g.gg < 1) continue;
+            double u = 0.45 + s.r * 0.45, A = (1 - u) * (1 - u), B = 2 * (1 - u) * u, C = u * u;
+            double x0 = A * g.X0 + B * g.qx + C * g.ex, y0 = A * g.Y0 + B * g.qy + C * g.ey, y1 = hillY(x0, hillDx, W, k) + 6 * k;
+            if (s.d == 1 && s.r < (t - 0.5) * 1.6) {
+                double w = (10 + s.r * 10) * tk;
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(argb(scale(trunk, 0.95), 1));
+                path.reset();
+                path.moveTo((float) (x0 - w * 0.3), (float) y0); path.lineTo((float) (x0 + w * 0.3), (float) y0);
+                path.lineTo((float) (x0 + w * 0.55), (float) y1); path.lineTo((float) (x0 - w * 0.55), (float) y1);
+                path.close();
+                c.drawPath(path, paint);
+                stroke(argb(bark, 0.6), Math.max(1, w * 0.08));
+                path.reset(); path.moveTo((float) x0, (float) y0); path.lineTo((float) (x0 + w * 0.1), (float) y1);
+                c.drawPath(path, paint);
+            } else if (s.d >= 2 && s.d <= 4 && s.r < t * 0.95) {
+                double ye = y0 + (y1 - y0) * (0.55 + 0.45 * clamp01(t * 1.2 - s.r));     // young roots don't reach the ground yet
+                stroke(argb(scale(trunk, 1.12), 0.85), (2 + s.r * 3) * k);
+                curve(c, x0, y0, x0 + (s.r - 0.5) * 24 * k, (y0 + ye) / 2, x0 + (s.r - 0.5) * 10 * k, ye);
+            }
+        }
+        paint.setStyle(Paint.Style.FILL);
+    }
+
+    /* crown. back = the far side, drawn before the branches: a darker, slightly higher mass per cluster.
+       front = dark inner mass, mid leaves around it, light leaves on the sun's side. */
+    private void drawCanopy(Canvas c, double tk, ArrayList<double[]> clusters, double[][] leaf, double t, double sunSide, Design dz, boolean back) {
+        double leafy = 0.45 + 0.55 * t, wide = dz.tree.equals("banyan") ? 0.58 : 0.42;
+        paint.setStyle(Paint.Style.FILL);
+        if (back) {
+            paint.setColor(argb(mix(scale(leaf[0], 0.8), haze, 0.12), 1));
+            for (double[] cl : clusters) {
+                Rng r3 = new Rng((int) cl[2] * 31 + 5);
+                double s = cl[3] * leafy;
+                for (int j = 0; j < 2; j++) {
+                    double cx = cl[0] + (r3.next() - 0.5) * 70 * s * tk, cy = cl[1] - (14 + r3.next() * 20) * s * tk, cr = (38 + r3.next() * 26) * s * tk;
+                    c.drawCircle((float) cx, (float) cy, (float) cr, paint);
+                }
+            }
+            return;
+        }
         paint.setColor(argb(leaf[0], 1));
         for (double[] cl : clusters) {
             Rng r3 = new Rng((int) cl[2] * 31 + 7);
@@ -389,24 +486,43 @@ final class ArtRenderer {
             Rng r3 = new Rng((int) cl[2] * 31 + 11);
             double s = cl[3] * leafy, R = 50 * s * tk;
             c.drawCircle((float) (cl[0] + sunSide * 6 * s * tk), (float) (cl[1] - 10 * s * tk), (float) (R * 0.62), paint);
-            for (int j = 0; j < 9; j++) {
-                double a = r3.next() * TAU, dd = (0.45 + r3.next() * 0.55) * R, ll = (14 + r3.next() * 9) * s * tk, la = a + (r3.next() - 0.5) * 0.7;
-                leafShape(c, cl[0] + Math.cos(a) * dd, cl[1] + Math.sin(a) * dd * 0.85 - 8 * s * tk, ll, la);
+            for (int j = 0; j < 13; j++) {
+                double a = r3.next() * TAU, dd = (0.45 + r3.next() * 0.6) * R, ll = (12 + r3.next() * 8) * s * tk, la = a + (r3.next() - 0.5) * 0.7;
+                leafShape(c, cl[0] + Math.cos(a) * dd, cl[1] + Math.sin(a) * dd * 0.85 - 8 * s * tk, ll, la, wide);
             }
         }
         paint.setColor(argb(leaf[2], 1));
         for (double[] cl : clusters) {
             Rng r3 = new Rng((int) cl[2] * 31 + 13);
             double s = cl[3] * leafy, R = 46 * s * tk;
-            for (int j = 0; j < 5; j++) {
+            for (int j = 0; j < 7; j++) {
                 double a = -Math.PI / 2 + sunSide * (0.2 + r3.next() * 1.0) + (r3.next() - 0.5) * 0.5;
-                double dd = (0.25 + r3.next() * 0.6) * R, ll = (12 + r3.next() * 7) * s * tk, la = a + (r3.next() - 0.5) * 0.8;
-                leafShape(c, cl[0] + Math.cos(a) * dd, cl[1] + Math.sin(a) * dd - 10 * s * tk, ll, la);
+                double dd = (0.25 + r3.next() * 0.65) * R, ll = (10 + r3.next() * 6) * s * tk, la = a + (r3.next() - 0.5) * 0.8;
+                leafShape(c, cl[0] + Math.cos(a) * dd, cl[1] + Math.sin(a) * dd - 10 * s * tk, ll, la, wide);
             }
         }
-        if (dz.flower.isEmpty() || clusters.isEmpty()) return;
-        double[] fl = hex(dz.flower);
+    }
+
+    /* flowers (blossoms or jacaranda bunches), or figs ripening on a mature banyan */
+    private void drawBlooms(Canvas c, double k, double tk, ArrayList<double[]> clusters, double[][] leaf, double t, Design dz) {
+        if (clusters.isEmpty()) return;
         Rng rb = new Rng(5);
+        paint.setStyle(Paint.Style.FILL);
+        if (dz.tree.equals("banyan")) {
+            long nf = Math.round(clusters.size() * 0.45 * clamp01((t - 0.6) / 0.4));
+            double[] fig = hex("#a8402c"), shine = hex("#f08a6a");
+            for (int i = 0; i < nf; i++) {
+                double[] cl = clusters.get((int) Math.floor(rb.next() * clusters.size()));
+                double fx = cl[0] + (rb.next() - 0.5) * 70 * tk, fy = cl[1] + (rb.next() - 0.4) * 50 * tk, fr = (3 + rb.next() * 2) * k;
+                paint.setColor(argb(scale(fig, 0.6 + 0.4 * light), 1));
+                c.drawCircle((float) fx, (float) fy, (float) fr, paint);
+                paint.setColor(argb(shine, 0.7 * light));
+                c.drawCircle((float) (fx - fr * 0.3), (float) (fy - fr * 0.3), (float) (fr * 0.35), paint);
+            }
+            return;
+        }
+        if (dz.flower.isEmpty()) return;
+        double[] fl = hex(dz.flower);
         boolean bunches = dz.tree.equals("umbrella");
         long nb = Math.round(clusters.size() * (bunches ? 2.2 : 1.3) * clamp01((t - 0.25) / 0.75));
         for (int i = 0; i < nb; i++) {
@@ -520,11 +636,12 @@ final class ArtRenderer {
     private void makeTree(int seed, String kind) {
         segs = new ArrayList<>();
         Rng rng = new Rng(seed);
-        double spread = kind.equals("umbrella") ? 0.9 : kind.equals("banyan") ? 1.0 : 0.62;
-        double up = kind.equals("umbrella") ? 0.78 : kind.equals("banyan") ? 0.72 : 0.9;   // how much branches keep pointing up
+        double spread = kind.equals("umbrella") ? 0.9 : kind.equals("banyan") ? 1.15 : 0.62;
+        double up = kind.equals("umbrella") ? 0.78 : kind.equals("banyan") ? 0.55 : 0.9;   // how much branches keep pointing up
         levels = kind.equals("banyan") ? 5 : 6;
+        lenGrow = kind.equals("banyan") ? 0.8 : 0.72;      // banyan limbs stay long: a wide, low crown
         double ang0 = (rng.next() - 0.5) * 0.08;
-        branch(rng, 0, 0, ang0, kind.equals("banyan") ? 200 : 230, kind.equals("banyan") ? 64 : 44, 0, spread, up);
+        branch(rng, 0, 0, ang0, kind.equals("banyan") ? 165 : 230, kind.equals("banyan") ? 80 : 44, 0, spread, up);
     }
 
     private void branch(Rng rng, double x, double y, double ang, double len, double w, int d, double spread, double up) {
@@ -540,7 +657,7 @@ final class ArtRenderer {
         for (int i = 0; i < n; i++) {
             int side = n == 2 ? (i != 0 ? 1 : -1) : i - 1;
             double na = ang * up + side * (0.32 + rng.next() * 0.3) * spread + (rng.next() - 0.5) * 0.15;
-            double nl = len * (0.72 + rng.next() * 0.1);
+            double nl = len * (lenGrow + rng.next() * 0.1);
             branch(rng, s.x1, s.y1, na, nl, w * 0.7, d + 1, spread, up);
         }
     }
@@ -562,8 +679,11 @@ final class ArtRenderer {
     }
 
     /** An almond-shaped leaf centred on (x, y), pointing along ang. */
-    private void leafShape(Canvas c, double x, double y, double len, double ang) {
-        double cs = Math.cos(ang), sn = Math.sin(ang), w = len * 0.42;
+    private void leafShape(Canvas c, double x, double y, double len, double ang) { leafShape(c, x, y, len, ang, 0.42); }
+
+    /** wide is the leaf's width as a fraction of its length. */
+    private void leafShape(Canvas c, double x, double y, double len, double ang, double wide) {
+        double cs = Math.cos(ang), sn = Math.sin(ang), w = len * wide;
         path.reset();
         path.moveTo((float) (x - cs * len), (float) (y - sn * len));
         path.quadTo((float) (x - sn * w), (float) (y + cs * w), (float) (x + cs * len), (float) (y + sn * len));
