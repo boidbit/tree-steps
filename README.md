@@ -1,20 +1,29 @@
 # Tree Steps
 
-A 3D tree that grows with the steps you walk. Drag to rotate, pinch to zoom, or switch on Tilt mode and move your phone.
+A 3D tree that grows with the steps you walk, in the app and as a live wallpaper on your home and lock screen.
 
-- `Tree3D.html` — the 3D tree (the app's home screen)
+- `Tree3D.html` — the app: the 3D tree (drag to rotate, pinch to zoom), today's steps, settings and first-run onboarding
 - `Seed Wallpapers.html` — the 2D seeded wallpaper generator
 - `lib/` — Three.js and OrbitControls, bundled so the app works offline
+- `store/icon-512.png` — the app icon for a store listing
 - `android/` — the Capacitor Android project, with the native parts in `app/src/main/java/com/boidbit/treesteps/`:
-  - `TreeStepsPlugin` — real steps, set-as-wallpaper and opening the live wallpaper picker, called from `Tree3D.html`
-  - `StepStore` — turns the phone's step counter into "steps today" and keeps the tree settings
+  - `TreeStepsPlugin` — real steps, settings and opening the live wallpaper picker, called from `Tree3D.html`
+  - `StepStore` — turns the phone's step counter into "steps today" and stores the settings the wallpaper reads
   - `TreeWallpaperService`, `TreeModel`, `TreeRenderer` — the live wallpaper (same tree as the app for a seed)
+  - the launcher icon is a vector (`res/drawable/ic_launcher_tree.xml` on `res/drawable-v24/ic_launcher_sky.xml`), with PNG copies in `res/mipmap-*` for older Android
 
 ## In the Android app
 
-- **Use my steps** asks for the "Physical activity" permission, then the tree grows with the steps you walk today (capped at 10,000).
-- **Set as wallpaper** saves the current view as a still image on the home screen, lock screen or both.
-- **Live wallpaper** opens Android's wallpaper screen for the Tree Steps live wallpaper. It grows with your steps, turns when you tilt the phone or swipe between home pages, and only redraws when something changes.
+The first launch walks through three screens: what the app does, allowing step counting ("Physical activity"), and setting the live wallpaper. After that the home screen shows today's steps against your goal and a **Set as live wallpaper** button. The gear opens **Settings**:
+
+| Section | Settings |
+|---|---|
+| Steps | Count my real steps · Daily goal (5k–15k; the tree is fully grown at the goal) · Preview steps (when real steps are off) |
+| Wallpaper | Update the tree: **Live** (grows as you walk while the wallpaper is on screen) or every 5 / 15 / 30 / 60 minutes (checks steps when you unlock, then on that interval) · Tilt to look around · Sky: follows the time or always sunset |
+| Step counter on the wallpaper | Style: off, steps, steps / goal, progress bar, percent · Position: under the tree or bottom · Size |
+| Tree | Colours · New tree (a different shape) · Preview growth |
+
+The wallpaper never runs while it is hidden. In interval mode it reads the step counter once when it becomes visible and then every N minutes; tilt uses the accelerometer only when switched on.
 
 Steps count from the first time you turn them on; Android's step counter cannot report steps from before that.
 
@@ -26,4 +35,4 @@ Installing it means allowing "install unknown apps" for your browser or file man
 
 ## Try it in a browser
 
-Open `Tree3D.html` directly. Add `?steps=8000&seed=123&pal=Orchid` to the address to set the tree.
+Open `Tree3D.html` directly. Add `?steps=8000&seed=123&pal=Orchid` to the address to set the tree. Settings are kept in the browser; real steps and the wallpaper only work in the Android app.

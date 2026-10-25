@@ -12,12 +12,13 @@ import android.os.Looper;
 import android.service.wallpaper.WallpaperService;
 import android.view.SurfaceHolder;
 
-import java.text.NumberFormat;
 import java.util.Calendar;
 
 /**
- * Live wallpaper: the 3D tree grows with today's steps, turns when you tilt the phone and
- * when you swipe between home-screen pages. It only redraws while something changes.
+ * Live wallpaper: the 3D tree grows with today's steps. Two update modes (Settings in the app):
+ * "Live" keeps the step counter listening while the wallpaper is on screen; an interval (5-60 min)
+ * only reads steps when the wallpaper becomes visible and then every N minutes, to save battery.
+ * Tilt-to-look-around is optional. Nothing runs while the wallpaper is hidden.
  */
 public class TreeWallpaperService extends WallpaperService {
 
@@ -28,29 +29,29 @@ public class TreeWallpaperService extends WallpaperService {
 
     private class TreeEngine extends Engine implements SensorEventListener {
         private static final double BASE_AZ = 0.5, BASE_EL = 0.14;
-        private static final int STEP_REBUILD = 50;   // rebuild the tree after this many new steps
-        private static final int LABEL_STEP = 10;     // redraw the step count after this many
+        private static final int STEP_REBUILD = 50;              // live mode: rebuild the tree after this many new steps
+        private static final int LABEL_STEP = 10;                // live mode: redraw the step count after this many
+        private static final long SKY_TICK_MS = 10 * 60 * 1000;  // live mode: the sky follows the clock in 10-minute steps
 
         private final Handler handler = new Handler(Looper.getMainLooper());
         private final TreeRenderer renderer = new TreeRenderer();
         private final Runnable drawRunner = this::animate;
+        private final Runnable tick = new Runnable() {
+            @Override
+            public void run() {
+                if (!visible) return;
+                if (!liveMode() && realSteps) refreshSteps(); else drawFrame();
+                handler.postDelayed(this, tickMs());
+            }
+        };
         private SensorManager sensors;
         private Sensor accel, stepCounter;
 
-        private static final long SKY_TICK_MS = 10 * 60 * 1000;   // the sky follows the clock in 10-minute steps
-
-        private final Runnable skyTick = new Runnable() {
-            @Override
-            public void run() {
-                drawFrame();
-                if (visible) handler.postDelayed(this, SKY_TICK_MS);
-            }
-        };
         private TreeModel model;
         private float fullY = 6, fullR = 3;
-        private boolean realSteps;
-        private int seed, steps, modelSteps;
-        private String pal;
+        private int seed, goal, steps, modelSteps, intervalMin;
+        private String pal, skyMode, labelStyle, labelPos, labelSize;
+        private boolean realSteps, tiltOn;
         private boolean visible, sensorsOn;
         private int width, height;
 
@@ -72,8 +73,7 @@ public class TreeWallpaperService extends WallpaperService {
         @Override
         public void onDestroy() {
             super.onDestroy();
-            stopSensors();
-            handler.removeCallbacks(drawRunner);
+            stopAll();
         }
 
         @Override
@@ -83,12 +83,11 @@ public class TreeWallpaperService extends WallpaperService {
                 loadSettings(false);
                 startSensors();
                 drawFrame();
-                handler.removeCallbacks(skyTick);
-                handler.postDelayed(skyTick, SKY_TICK_MS);
+                if (!liveMode() && realSteps) refreshSteps();   // e.g. right after unlocking
+                handler.removeCallbacks(tick);
+                handler.postDelayed(tick, tickMs());
             } else {
-                stopSensors();
-                handler.removeCallbacks(drawRunner);
-                handler.removeCallbacks(skyTick);
+                stopAll();
             }
         }
 
@@ -103,9 +102,7 @@ public class TreeWallpaperService extends WallpaperService {
         public void onSurfaceDestroyed(SurfaceHolder holder) {
             super.onSurfaceDestroyed(holder);
             visible = false;
-            stopSensors();
-            handler.removeCallbacks(drawRunner);
-            handler.removeCallbacks(skyTick);
+            stopAll();
         }
 
         @Override
@@ -114,39 +111,70 @@ public class TreeWallpaperService extends WallpaperService {
             updateTargets();
         }
 
+        private void stopAll() {
+            stopSensors();
+            handler.removeCallbacks(drawRunner);
+            handler.removeCallbacks(tick);
+        }
+
         /* ---------- settings and steps ---------- */
+
+        private boolean liveMode() { return intervalMin <= 0; }
+
+        private long tickMs() { return liveMode() ? SKY_TICK_MS : intervalMin * 60_000L; }
 
         private void loadSettings(boolean force) {
             Context c = TreeWallpaperService.this;
-            int newSeed = StepStore.seed(c);
+            int newSeed = StepStore.seed(c), newGoal = StepStore.goal(c);
             String newPal = StepStore.palette(c);
-            int newSteps = currentSteps();
-            boolean shapeChanged = force || model == null || newSeed != seed || !newPal.equals(pal);
             realSteps = StepStore.useRealSteps(c) && StepStore.hasPermission(c) && stepCounter != null;
+            intervalMin = StepStore.prefs(c).getInt("interval_min", 15);
+            tiltOn = StepStore.tilt(c);
+            skyMode = StepStore.skyMode(c);
+            labelStyle = StepStore.labelStyle(c);
+            labelPos = StepStore.labelPos(c);
+            labelSize = StepStore.labelSize(c);
+            if (!tiltOn) { gx = 0; gy = 7.5; updateTargets(); }
+
+            boolean shapeChanged = force || model == null || newSeed != seed || !newPal.equals(pal);
             if (shapeChanged) {
-                TreeModel full = new TreeModel(newSeed, newPal, 10000);
+                TreeModel full = new TreeModel(newSeed, newPal, 1, 1);
                 fullY = Math.max(3, full.maxY); fullR = Math.max(1.5f, full.maxR);
             }
-            steps = newSteps;
-            if (shapeChanged || Math.abs(newSteps - modelSteps) >= STEP_REBUILD || (newSteps == 0) != (modelSteps == 0)) {
-                seed = newSeed; pal = newPal; modelSteps = newSteps;
-                model = new TreeModel(seed, pal, modelSteps);
+            steps = realSteps ? StepStore.lastKnown(c) : StepStore.manualSteps(c);
+            if (shapeChanged || newGoal != goal || steps != modelSteps) {
+                seed = newSeed; pal = newPal; goal = newGoal; modelSteps = steps;
+                model = new TreeModel(seed, pal, modelSteps, goal);
             }
         }
 
-        private int currentSteps() {
-            Context c = TreeWallpaperService.this;
-            if (StepStore.useRealSteps(c) && StepStore.hasPermission(c) && stepCounter != null) return StepStore.lastKnown(c);
-            return StepStore.manualSteps(c);
+        /** Interval mode: one sensor read, then redraw. */
+        private void refreshSteps() {
+            StepStore.readOnce(TreeWallpaperService.this, (s, fresh) -> {
+                applySteps(s, 1, 1);
+                if (visible) drawFrame();
+            });
+        }
+
+        /** Updates the shown count and rebuilds the tree when enough steps have been added. */
+        private boolean applySteps(int s, int rebuildEvery, int labelEvery) {
+            boolean changed = false;
+            if (Math.abs(s - modelSteps) >= rebuildEvery) {
+                modelSteps = s;
+                model = new TreeModel(seed, pal, s, goal);
+                changed = true;
+            }
+            if (Math.abs(s - steps) >= labelEvery || changed) {
+                steps = s;
+                changed = true;
+            }
+            return changed;
         }
 
         private void startSensors() {
             if (sensors == null || sensorsOn) return;
-            if (accel != null) sensors.registerListener(this, accel, SensorManager.SENSOR_DELAY_UI, handler);
-            Context c = TreeWallpaperService.this;
-            if (stepCounter != null && StepStore.useRealSteps(c) && StepStore.hasPermission(c)) {
-                sensors.registerListener(this, stepCounter, SensorManager.SENSOR_DELAY_NORMAL, handler);
-            }
+            if (tiltOn && accel != null) sensors.registerListener(this, accel, SensorManager.SENSOR_DELAY_UI, handler);
+            if (liveMode() && realSteps) sensors.registerListener(this, stepCounter, SensorManager.SENSOR_DELAY_NORMAL, handler);
             sensorsOn = true;
         }
 
@@ -159,14 +187,7 @@ public class TreeWallpaperService extends WallpaperService {
         public void onSensorChanged(SensorEvent e) {
             if (e.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
                 int s = StepStore.record(TreeWallpaperService.this, e.values[0]);
-                if (Math.abs(s - modelSteps) >= STEP_REBUILD) {
-                    modelSteps = s;
-                    model = new TreeModel(seed, pal, s);
-                }
-                if (Math.abs(s - steps) >= LABEL_STEP) {
-                    steps = s;
-                    drawFrame();
-                }
+                if (applySteps(s, STEP_REBUILD, LABEL_STEP)) drawFrame();
                 return;
             }
             gx = gx * 0.85 + e.values[0] * 0.15;
@@ -213,9 +234,15 @@ public class TreeWallpaperService extends WallpaperService {
                     // screen, but growth through the day is still visible
                     float fitY = model.maxY * 0.6f + fullY * 0.4f + 0.3f;
                     float fitR = model.maxR * 0.6f + fullR * 0.4f + 0.3f;
-                    Calendar now = Calendar.getInstance();
-                    double hour = now.get(Calendar.HOUR_OF_DAY) + now.get(Calendar.MINUTE) / 60.0;
-                    String label = realSteps ? NumberFormat.getIntegerInstance().format(steps) + " steps" : null;
+                    double hour;
+                    if ("sunset".equals(skyMode)) {
+                        hour = 18.3;
+                    } else {
+                        Calendar now = Calendar.getInstance();
+                        hour = now.get(Calendar.HOUR_OF_DAY) + now.get(Calendar.MINUTE) / 60.0;
+                    }
+                    TreeRenderer.Label label = realSteps && !"off".equals(labelStyle)
+                        ? new TreeRenderer.Label(labelStyle, labelPos, labelSize, steps, goal) : null;
                     double restAz = BASE_AZ + (pageOffset - 0.5) * 1.0;
                     renderer.draw(c, width, height, model, fitY, fitR, az, el, restAz, hour, label);
                 }

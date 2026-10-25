@@ -18,5 +18,9 @@
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <!-- Android 12+ draws its own splash: our colour and tree icon -->
+        <item name="windowSplashScreenBackground">#FF140B2B</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_tree</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>

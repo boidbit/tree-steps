@@ -3,54 +3,142 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Seed Tree 3D</title>
+<title>Tree Steps</title>
 <style>
-:root { --bg: #0b0d12; --surface: rgba(20, 24, 33, 0.82); --line: #29313f; --fg: #eef1f6; --muted: #8e98ac; --accent: #ff8a5c; }
+:root {
+  --bg: #0b0d12; --surface: rgba(20, 24, 33, 0.86); --solid: #141821; --raised: #1c2230; --line: #29313f;
+  --fg: #eef1f6; --muted: #8e98ac; --accent: #ff8a5c; --accent-fg: #1a0e08;
+}
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 15px/1.4 "DM Sans", "Segoe UI", system-ui, sans-serif; overflow: hidden; touch-action: none; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 15px/1.45 "Segoe UI", Roboto, system-ui, sans-serif; overflow: hidden; touch-action: none; }
 canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-.top { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
-.top b { font-size: 18px; letter-spacing: -0.01em; text-shadow: 0 1px 12px rgba(0,0,0,.5); }
-.top span { color: var(--muted); font-size: 12.5px; text-shadow: 0 1px 8px rgba(0,0,0,.6); }
-.bar { position: fixed; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); max-width: 560px; margin: 0 auto; padding: 14px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); backdrop-filter: blur(10px); display: flex; flex-direction: column; gap: 12px; }
-.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.val { font-family: ui-monospace, "DM Mono", monospace; color: var(--muted); font-size: 13px; }
-input[type=range] { width: 100%; accent-color: var(--accent); }
-button, select { font: inherit; color: inherit; padding: 9px 14px; border-radius: 12px; border: 1px solid var(--line); background: #1c2230; font-weight: 600; font-size: 14px; cursor: pointer; }
-button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
-button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.hint { color: var(--muted); font-size: 12.5px; }
 [hidden] { display: none !important; }
-input[type=range]:disabled { opacity: 0.5; }
-.toast { position: fixed; left: 50%; top: max(52px, calc(env(safe-area-inset-top) + 40px)); transform: translate(-50%, -8px); padding: 10px 18px; border-radius: 999px; background: var(--fg); color: var(--bg); font-weight: 600; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; max-width: calc(100% - 32px); text-align: center; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* top bar */
+.top { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 16px; right: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.top b { display: block; font-size: 19px; letter-spacing: -0.01em; text-shadow: 0 1px 12px rgba(0,0,0,.5); }
+.top span { color: var(--muted); font-size: 12.5px; text-shadow: 0 1px 8px rgba(0,0,0,.6); }
+.iconbtn { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); backdrop-filter: blur(10px); }
+.iconbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* home card */
+.home { position: fixed; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; padding: 16px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); backdrop-filter: blur(12px); display: flex; flex-direction: column; gap: 12px; }
+.count { display: flex; align-items: baseline; gap: 8px; }
+.count .big { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.count .muted { color: var(--muted); }
+.progress { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.12); overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; border-radius: 4px; background: var(--accent); transition: width .4s; }
+.note { margin: 0; color: var(--muted); font-size: 13px; }
+.primary { width: 100%; padding: 14px; border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 16px; }
+.secondary { width: 100%; padding: 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--raised); font-weight: 600; }
+
+/* settings sheet */
+.sheet { position: fixed; inset: 0; z-index: 20; background: var(--bg); overflow-y: auto; touch-action: pan-y; padding: max(12px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+.sheethead { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 8px 0 12px; background: var(--bg); }
+.sheethead h1 { margin: 0; font-size: 22px; }
+.done { padding: 9px 18px; border-radius: 12px; border: 0; background: var(--accent); color: var(--accent-fg); font-weight: 700; }
+.group { max-width: 560px; margin: 0 auto 18px; }
+.group h2 { margin: 0 0 8px 4px; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.box { border-radius: 18px; background: var(--solid); border: 1px solid var(--line); }
+.item { padding: 14px 16px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.item:first-child { border-top: 0; }
+.item .lab { font-weight: 600; }
+.item .sub { color: var(--muted); font-size: 13px; margin-top: -6px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { flex: 1 1 auto; min-width: 56px; padding: 9px 10px; border-radius: 11px; border: 1px solid var(--line); background: var(--raised); color: var(--muted); font-weight: 600; font-size: 14px; }
+.seg button[aria-pressed=true] { border-color: var(--accent); color: var(--fg); background: rgba(255,138,92,0.14); }
+.swatches button { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; }
+.swatches i { display: flex; width: 54px; height: 22px; border-radius: 6px; overflow: hidden; }
+.swatches i b { flex: 1; }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.switch input { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 48px; height: 28px; margin: 0; border-radius: 14px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); transition: background .15s; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.switch input:checked { background: var(--accent); box-shadow: none; }
+.switch input:checked::after { transform: translateX(20px); background: #fff; }
+.row2 { display: flex; gap: 8px; }
+.row2 button { flex: 1; padding: 11px; border-radius: 12px; border: 1px solid var(--line); background: var(--raised); font-weight: 600; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.val { font-variant-numeric: tabular-nums; color: var(--muted); }
+.about { color: var(--muted); font-size: 12.5px; text-align: center; margin: 8px 0 0; }
+
+/* onboarding */
+.onboard { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; padding: 16px; background: linear-gradient(to top, #080a10 42%, rgba(8,10,16,0.9) 58%, rgba(8,10,16,0.25)); }
+.obcard { width: 100%; max-width: 480px; margin-bottom: max(8px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; }
+.obcard h1 { margin: 0; font-size: 28px; line-height: 1.15; letter-spacing: -0.02em; }
+.obcard p { margin: 0; color: #c9d0dc; font-size: 15.5px; }
+.dots { display: flex; gap: 6px; }
+.dots i { width: 8px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.25); transition: width .2s, background .2s; }
+.dots i.on { width: 22px; background: var(--accent); }
+.skip { background: none; border: 0; color: var(--muted); padding: 10px; font-weight: 600; }
+
+.toast { position: fixed; z-index: 40; left: 50%; top: max(64px, calc(env(safe-area-inset-top) + 52px)); transform: translate(-50%, -8px); padding: 10px 18px; border-radius: 999px; background: var(--fg); color: var(--bg); font-weight: 600; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; max-width: calc(100% - 32px); text-align: center; }
 .toast.on { opacity: 1; transform: translate(-50%, 0); }
 </style>
 </head>
 <body>
-<canvas id="c" aria-label="3D tree"></canvas>
-<div class="top"><b>Seed Tree 3D</b><span id="hintTop">Drag to rotate · pinch to zoom</span></div>
-<div class="bar">
-  <div>
-    <div class="row"><span id="stepslab">Steps today</span><span class="val" id="stepsv"></span></div>
-    <input type="range" id="steps" min="0" max="10000" step="100" aria-label="Steps walked today">
-  </div>
-  <div class="row">
-    <button id="walk" type="button">Watch it grow</button>
-    <button id="tilt" type="button" aria-pressed="false">Tilt mode</button>
-    <button id="seedbtn" type="button">New tree</button>
-    <select id="pal" aria-label="Colour set"></select>
-  </div>
-  <div class="row" id="nativerow" hidden>
-    <button id="realsteps" type="button" aria-pressed="false">Use my steps</button>
-    <button id="livewp" type="button">Live wallpaper</button>
-    <button id="setwp" type="button">Set as wallpaper</button>
-    <select id="wptarget" aria-label="Where to set the wallpaper">
-      <option value="both">Home + lock</option>
-      <option value="home">Home screen</option>
-      <option value="lock">Lock screen</option>
-    </select>
+<canvas id="c" aria-label="Your tree"></canvas>
+
+<header class="top">
+  <div><b>Tree Steps</b><span>Drag to rotate · pinch to zoom</span></div>
+  <button class="iconbtn" id="openSettings" type="button" aria-label="Settings">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+</header>
+
+<section class="home" aria-label="Today">
+  <div class="count"><span class="big" id="stepsNum">0</span><span class="muted" id="goalTxt">of 10,000 steps</span></div>
+  <div class="progress" aria-hidden="true"><i id="prog"></i></div>
+  <p class="note" id="homeNote"></p>
+  <button class="secondary" id="stepsBtn" type="button" hidden>Count my real steps</button>
+  <button class="primary" id="wallBtn" type="button">Set as live wallpaper</button>
+</section>
+
+<div class="sheet" id="settings" hidden role="dialog" aria-label="Settings">
+  <div class="sheethead"><h1>Settings</h1><button class="done" id="closeSettings" type="button">Done</button></div>
+
+  <div class="group"><h2>Steps</h2><div class="box">
+    <div class="item"><label class="switch"><span class="lab">Count my real steps</span><input type="checkbox" id="useReal" role="switch"></label>
+      <span class="sub" id="useRealSub">Uses the phone's step counter. Your steps never leave the phone.</span></div>
+    <div class="item"><span class="lab">Daily goal</span><span class="sub">The tree is fully grown when you reach it.</span><div class="seg" id="goalSeg"></div></div>
+    <div class="item" id="previewItem"><div class="switch"><span class="lab">Preview steps</span><span class="val" id="previewVal"></span></div>
+      <input type="range" id="previewSteps" min="0" max="10000" step="100" aria-label="Preview steps"></div>
+  </div></div>
+
+  <div class="group"><h2>Wallpaper</h2><div class="box">
+    <div class="item"><span class="lab">Update the tree</span><span class="sub" id="intervalSub"></span><div class="seg" id="intervalSeg"></div></div>
+    <div class="item"><label class="switch"><span class="lab">Tilt to look around</span><input type="checkbox" id="tilt" role="switch"></label>
+      <span class="sub">Turns the tree as you tilt the phone. Uses a little more battery.</span></div>
+    <div class="item"><span class="lab">Sky</span><div class="seg" id="skySeg"></div></div>
+    <div class="item"><button class="secondary" id="wallBtn2" type="button">Set as live wallpaper</button></div>
+  </div></div>
+
+  <div class="group"><h2>Step counter on the wallpaper</h2><div class="box">
+    <div class="item"><span class="lab">Style</span><div class="seg" id="styleSeg"></div></div>
+    <div class="item"><span class="lab">Position</span><div class="seg" id="posSeg"></div></div>
+    <div class="item"><span class="lab">Size</span><div class="seg" id="sizeSeg"></div></div>
+  </div></div>
+
+  <div class="group"><h2>Tree</h2><div class="box">
+    <div class="item"><span class="lab">Colours</span><div class="seg swatches" id="palSeg"></div></div>
+    <div class="item"><div class="row2"><button id="newTree" type="button">New tree</button><button id="previewGrow" type="button">Preview growth</button></div>
+      <span class="sub">A new tree has a different shape. Preview shows it growing from 0 to your goal.</span></div>
+  </div></div>
+
+  <p class="about">Tree Steps · steps are counted on your phone only</p>
+</div>
+
+<div class="onboard" id="onboard" hidden>
+  <div class="obcard">
+    <div class="dots" id="obDots"><i class="on"></i><i></i><i></i></div>
+    <h1 id="obTitle"></h1>
+    <p id="obText"></p>
+    <button class="primary" id="obMain" type="button"></button>
+    <button class="skip" id="obSkip" type="button"></button>
   </div>
 </div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="lib/capacitor.js"></script>
@@ -92,6 +180,7 @@ input[type=range]:disabled { opacity: 0.5; }
     steps: q.has('steps') ? Math.max(0, Math.min(10000, parseInt(q.get('steps'), 10) || 0)) : 6000,
     seed: q.has('seed') ? parseInt(q.get('seed'), 10) | 0 : 48213,
     pal: q.has('pal') ? q.get('pal') : 'Sunset',
+    goal: 10000,
     detail: 0.6
   };
   function curPal() { for (var i = 0; i < PALETTES.length; i++) if (PALETTES[i].name.toLowerCase() === state.pal.toLowerCase()) return PALETTES[i]; return PALETTES[0]; }
@@ -234,7 +323,7 @@ input[type=range]:disabled { opacity: 0.5; }
   var treeTop = 6;
   function buildTree() {
     var pal = curPal().c, seed = state.seed, d = state.detail;
-    var t = clamp01(state.steps / 10000);
+    var t = clamp01(state.steps / state.goal);
     var levels = Math.round(6 + d * 3), P = 0.3 + t * (levels + 0.2);
     var wood = mix([62, 42, 34], pal[1], 0.28), twig = mix([96, 70, 52], pal[3], 0.18);
     var nb = 0, nl = 0, nbl = 0, maxY = 0;
@@ -313,126 +402,219 @@ input[type=range]:disabled { opacity: 0.5; }
   function rebuildAll() { applyPalette(); buildGround(); buildGrass(); buildTree(); seedParticles(); syncUI(); }
   function rebuildTree() { buildTree(); syncUI(); }
 
-  /* ---------- UI ---------- */
-  var live = false, realSteps = 0, walking = false;
-  function syncUI() { $('steps').value = String(state.steps); $('stepsv').textContent = (live && !walking ? realSteps : state.steps).toLocaleString(); }
-  PALETTES.forEach(function (p) { var o = document.createElement('option'); o.value = p.name; o.textContent = p.name; $('pal').appendChild(o); });
-  $('pal').value = curPal().name;
-  $('pal').addEventListener('change', function () { state.pal = $('pal').value; applyPalette(); buildGrass(); buildTree(); saveNative(); });
-  $('steps').addEventListener('input', function () { state.steps = parseInt($('steps').value, 10) || 0; rebuildTree(); saveNative(); });
-  $('seedbtn').addEventListener('click', function () { state.seed = 1000 + Math.floor(Math.random() * 998999); rebuildAll(); saveNative(); });
-  var walkRaf = 0;
-  $('walk').addEventListener('click', function () {
-    cancelAnimationFrame(walkRaf);
-    var t0 = performance.now(), DUR = 8000;
-    walking = true;
-    (function frame(now) {
-      var u = Math.min(1, (now - t0) / DUR);
-      state.steps = Math.round(u * 100) * 100; rebuildTree();
-      if (u < 1) walkRaf = requestAnimationFrame(frame);
-      else { walking = false; if (live) { state.steps = Math.min(10000, realSteps); rebuildTree(); } }
-    })(t0);
-  });
-
-  /* ---------- Android app only: real steps, still wallpaper, live wallpaper ---------- */
+  /* ---------- settings: stored natively so the wallpaper reads them; in a browser, kept in localStorage ---------- */
   var TS = (window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform() && Capacitor.registerPlugin)
     ? Capacitor.registerPlugin('TreeSteps') : null;
-  var toastTimer = 0, saveTimer = 0;
+  var DEFAULTS = { seed: 48213, pal: 'Sunset', manualSteps: 6000, useReal: false, goal: 10000, labelStyle: 'goal',
+    labelPos: 'tree', labelSize: 'm', intervalMin: 15, tilt: false, skyMode: 'time' };
+  var settings = {}, k;
+  for (k in DEFAULTS) settings[k] = DEFAULTS[k];
+  var realSteps = 0, hasSensor = true, walking = false, wallActive = false, shownSeed = null, shownPal = null;
+  var fmt = function (n) { return Number(n).toLocaleString(); };
+
+  var saveTimer = 0, pending = {};
+  function store(patch) {
+    for (var key in patch) { settings[key] = patch[key]; pending[key] = patch[key]; }
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      var p = pending; pending = {};
+      if (TS) TS.saveSettings(p).catch(function () {});
+      else try { localStorage.setItem('ts.settings', JSON.stringify(settings)); } catch (e) {}
+    }, 200);
+  }
+  function loadSettings() {
+    if (TS) {
+      return TS.getSettings().then(function (r) {
+        for (var key in DEFAULTS) if (r[key] !== undefined && r[key] !== null) settings[key] = r[key];
+        hasSensor = r.hasSensor !== false;
+      }).catch(function () {});
+    }
+    try { var o = JSON.parse(localStorage.getItem('ts.settings') || '{}'); for (var key2 in DEFAULTS) if (o[key2] !== undefined) settings[key2] = o[key2]; } catch (e) {}
+    if (q.has('seed')) settings.seed = state.seed;
+    if (q.has('pal')) settings.pal = state.pal;
+    if (q.has('steps')) settings.manualSteps = state.steps;
+    return Promise.resolve();
+  }
+  function shownSteps() { return settings.useReal ? realSteps : settings.manualSteps; }
+
+  /* pushes settings into the 3D scene, rebuilding only what changed */
+  function applyToScene() {
+    state.seed = settings.seed; state.pal = settings.pal; state.goal = settings.goal;
+    if (!walking) state.steps = shownSteps();
+    if (shownSeed !== state.seed || shownPal !== state.pal) { shownSeed = state.seed; shownPal = state.pal; rebuildAll(); }
+    else rebuildTree();
+  }
+
+  /* ---------- home ---------- */
+  function syncUI() {
+    var s = walking ? state.steps : shownSteps(), g = settings.goal;
+    $('stepsNum').textContent = fmt(s);
+    $('goalTxt').textContent = 'of ' + fmt(g) + ' steps';
+    $('prog').style.width = Math.min(100, s / g * 100) + '%';
+    var note;
+    if (walking) note = 'Previewing growth…';
+    else if (!settings.useReal) note = TS ? 'Preview only. Turn on real steps to grow it by walking.' : 'Preview in the browser. Real steps work in the Android app.';
+    else if (s >= g) note = 'Goal reached. Your tree is in full bloom.';
+    else note = fmt(g - s) + ' more steps to a full tree today.';
+    $('homeNote').textContent = note;
+    $('stepsBtn').hidden = !TS || settings.useReal || !hasSensor;
+    $('wallBtn').hidden = !TS;
+    $('wallBtn').textContent = wallActive ? 'Live wallpaper is on' : 'Set as live wallpaper';
+    $('wallBtn').className = wallActive ? 'secondary' : 'primary';
+  }
+
+  var toastTimer = 0;
   function toast(msg) {
     var t = $('toast'); t.textContent = msg; t.classList.add('on');
     clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('on'); }, 2200);
   }
-  function saveNative() {
-    if (!TS) return;
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () {
-      var s = { seed: state.seed, pal: curPal().name };
-      if (!live) s.manualSteps = state.steps;
-      TS.saveSettings(s).catch(function () {});
-    }, 250);
+
+  function turnOnSteps() {
+    if (!TS) { toast('Real steps work in the Android app'); return Promise.resolve(false); }
+    return TS.enableSteps().then(function (r) {
+      if (r.granted) { settings.useReal = true; pollSteps(); toast('Growing with your real steps'); return true; }
+      toast(r.reason === 'nosensor' ? 'This phone has no step counter' : 'Allow "Physical activity" to count steps');
+      return false;
+    }).catch(function (e) { toast(e.message || 'Could not turn on steps'); return false; })
+      .then(function (ok) { syncSettings(); syncUI(); return ok; });
   }
-  function setLive(on) {
-    live = on;
-    $('realsteps').setAttribute('aria-pressed', on ? 'true' : 'false');
-    $('steps').disabled = on;
-    $('stepslab').textContent = on ? 'Steps today (live)' : 'Steps today';
-    syncUI();
+  function openWallpaper() {
+    if (!TS) return;
+    TS.openLiveWallpaper().catch(function (e) { toast(e.message || 'Could not open the wallpaper screen'); });
+  }
+  function checkWallpaper() {
+    if (!TS) return;
+    TS.wallpaperStatus().then(function (r) { wallActive = !!r.active; syncUI(); }).catch(function () {});
   }
   function pollSteps() {
-    if (!TS || !live) return;
+    if (!TS || !settings.useReal || document.hidden) return;
     TS.getSteps().then(function (r) {
-      if (!r.available) { setLive(false); return; }
-      realSteps = r.steps;
-      var grow = Math.min(10000, r.steps);
-      if (!walking && grow !== state.steps) { state.steps = grow; rebuildTree(); } else syncUI();
+      if (!r.available) { if (r.reason === 'permission') { settings.useReal = false; syncSettings(); } syncUI(); return; }
+      if (r.steps !== realSteps) { realSteps = r.steps; applyToScene(); } else syncUI();
     }).catch(function () {});
   }
-  /* renders the current view at the phone's full resolution and returns it as a JPEG */
-  function snapshot() {
-    var dpr = window.devicePixelRatio || 1;
-    renderer.setPixelRatio(Math.min(dpr, 3)); resize(); renderer.render(scene, camera);
-    var url = canvas.toDataURL('image/jpeg', 0.92);
-    renderer.setPixelRatio(Math.min(dpr, 2)); resize();
-    return url;
+
+  $('stepsBtn').addEventListener('click', turnOnSteps);
+  $('wallBtn').addEventListener('click', openWallpaper);
+
+  /* ---------- settings sheet ---------- */
+  function seg(id, opts, key, onChange) {
+    var el = $(id);
+    opts.forEach(function (o) {
+      var b = document.createElement('button'); b.type = 'button'; b.dataset.v = String(o[0]);
+      if (o.length > 2) b.appendChild(o[2]); else b.textContent = o[1];
+      if (o.length > 2) b.appendChild(document.createTextNode(o[1]));
+      b.addEventListener('click', function () { var p = {}; p[key] = o[0]; store(p); syncSettings(); if (onChange) onChange(o[0]); });
+      el.appendChild(b);
+    });
+  }
+  function syncSeg(id, val) {
+    Array.prototype.forEach.call($(id).children, function (b) { b.setAttribute('aria-pressed', b.dataset.v === String(val) ? 'true' : 'false'); });
+  }
+  seg('goalSeg', [[5000, '5k'], [8000, '8k'], [10000, '10k'], [12000, '12k'], [15000, '15k']], 'goal', applyToScene);
+  seg('intervalSeg', [[0, 'Live'], [5, '5 min'], [15, '15 min'], [30, '30 min'], [60, '1 hour']], 'intervalMin');
+  seg('skySeg', [['time', 'Follows the time'], ['sunset', 'Always sunset']], 'skyMode');
+  seg('styleSeg', [['off', 'Off'], ['steps', 'Steps'], ['goal', 'Steps / goal'], ['bar', 'Bar'], ['percent', '%']], 'labelStyle');
+  seg('posSeg', [['tree', 'Under the tree'], ['bottom', 'Bottom']], 'labelPos');
+  seg('sizeSeg', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']], 'labelSize');
+  seg('palSeg', PALETTES.map(function (p) {
+    var sw = document.createElement('i');
+    p.c.forEach(function (c) { var b = document.createElement('b'); b.style.background = 'rgb(' + c.join(',') + ')'; sw.appendChild(b); });
+    return [p.name, p.name, sw];
+  }), 'pal', applyToScene);
+
+  function syncSettings() {
+    syncSeg('goalSeg', settings.goal); syncSeg('intervalSeg', settings.intervalMin); syncSeg('skySeg', settings.skyMode);
+    syncSeg('styleSeg', settings.labelStyle); syncSeg('posSeg', settings.labelPos); syncSeg('sizeSeg', settings.labelSize);
+    syncSeg('palSeg', settings.pal);
+    $('useReal').checked = !!settings.useReal;
+    $('useReal').disabled = !hasSensor;
+    $('useRealSub').textContent = hasSensor ? 'Uses the phone\'s step counter. Your steps never leave the phone.' : 'This phone has no step counter.';
+    $('tilt').checked = !!settings.tilt;
+    $('intervalSub').textContent = settings.intervalMin === 0
+      ? 'Grows as you walk while the wallpaper is on screen. Uses the most battery.'
+      : 'Checks your steps when you unlock, then every ' + (settings.intervalMin === 60 ? 'hour' : settings.intervalMin + ' minutes') + '. Light on battery.';
+    $('previewItem').hidden = !!settings.useReal;
+    $('previewSteps').max = String(settings.goal);
+    $('previewSteps').value = String(Math.min(settings.manualSteps, settings.goal));
+    $('previewVal').textContent = fmt(Math.min(settings.manualSteps, settings.goal));
   }
 
-  if (TS) {
-    $('nativerow').hidden = false;
-    $('realsteps').addEventListener('click', function () {
-      if (live) {
-        setLive(false); state.steps = Math.min(10000, realSteps); rebuildTree();
-        TS.saveSettings({ useReal: false, manualSteps: state.steps }).catch(function () {});
-        toast('Back to the slider');
-        return;
-      }
-      TS.enableSteps().then(function (r) {
-        if (r.granted) { setLive(true); pollSteps(); toast('Growing with your real steps'); }
-        else toast(r.reason === 'nosensor' ? 'This phone has no step counter' : 'Allow "Physical activity" to count steps');
-      }).catch(function (e) { toast(e.message || 'Could not turn on steps'); });
-    });
-    $('setwp').addEventListener('click', function () {
-      toast('Setting wallpaper…');
-      TS.setWallpaper({ image: snapshot(), target: $('wptarget').value })
-        .then(function () { toast('Wallpaper set'); })
-        .catch(function (e) { toast(e.message || 'Could not set wallpaper'); });
-    });
-    $('livewp').addEventListener('click', function () {
-      saveNative();
-      TS.openLiveWallpaper().catch(function (e) { toast(e.message || 'Could not open the wallpaper picker'); });
-    });
-    TS.getSteps().then(function (r) { if (r.available) { setLive(true); pollSteps(); } }).catch(function () {});
-    setInterval(pollSteps, 5000);
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) pollSteps(); });
-    saveNative();
-  }
+  $('useReal').addEventListener('change', function () {
+    if ($('useReal').checked) { turnOnSteps(); return; }
+    store({ useReal: false }); applyToScene(); syncSettings();
+  });
+  $('tilt').addEventListener('change', function () { store({ tilt: $('tilt').checked }); });
+  $('previewSteps').addEventListener('input', function () {
+    store({ manualSteps: parseInt($('previewSteps').value, 10) || 0 });
+    $('previewVal').textContent = fmt(settings.manualSteps);
+    applyToScene();
+  });
+  $('newTree').addEventListener('click', function () { store({ seed: 1000 + Math.floor(Math.random() * 998999) }); applyToScene(); toast('New tree planted'); });
+  $('wallBtn2').addEventListener('click', openWallpaper);
+  $('wallBtn2').parentNode.hidden = !TS;
 
-  /* tilt mode: the phone's gyroscope moves the camera, which is how the tree can feel 3D when set as a wallpaper */
-  var tilt = { on: false, g: 0, b: 55, base: null };
-  function onOrient(e) { if (e.gamma !== null) { tilt.g = e.gamma; tilt.b = e.beta; } }
-  function setTilt(on) {
-    tilt.on = on; $('tilt').setAttribute('aria-pressed', on ? 'true' : 'false');
-    if (on) {
-      var off = camera.position.clone().sub(TARGET);
-      tilt.base = new THREE.Spherical().setFromVector3(off); tilt.cur = { az: tilt.base.theta, pol: tilt.base.phi };
-      controls.enabled = false; controls.autoRotate = false;
-      window.addEventListener('deviceorientation', onOrient);
-      $('hintTop').textContent = 'Tilt your phone';
-    } else {
-      window.removeEventListener('deviceorientation', onOrient); controls.enabled = true; controls.update();
-      $('hintTop').textContent = 'Drag to rotate · pinch to zoom';
+  function openSheet() { syncSettings(); $('settings').hidden = false; }
+  function closeSheet() { $('settings').hidden = true; applyToScene(); checkWallpaper(); }
+  $('openSettings').addEventListener('click', openSheet);
+  $('closeSettings').addEventListener('click', closeSheet);
+
+  var walkRaf = 0;
+  $('previewGrow').addEventListener('click', function () {
+    closeSheet();
+    cancelAnimationFrame(walkRaf);
+    var t0 = performance.now(), DUR = 7000, g = settings.goal;
+    walking = true;
+    (function frame(now) {
+      var u = Math.min(1, (now - t0) / DUR);
+      state.steps = Math.round(u * g / 100) * 100; rebuildTree();
+      if (u < 1) walkRaf = requestAnimationFrame(frame);
+      else { walking = false; applyToScene(); }
+    })(t0);
+  });
+
+  /* ---------- first-run onboarding (Android app only) ---------- */
+  var OB = [
+    { title: 'Grow a tree by walking', text: 'Every step you take today helps your tree grow, right on your lock screen. Reach your daily goal and it blooms.',
+      main: 'Next', skip: 'Skip', act: function () { return Promise.resolve(); } },
+    { title: 'Count your steps', text: 'Tree Steps uses your phone\'s step counter. Android will ask for "Physical activity" access. Your steps stay on this phone.',
+      main: 'Allow step counting', skip: 'Not now', act: turnOnSteps },
+    { title: 'Put it on your lock screen', text: 'By default the tree updates when you unlock and every 15 minutes, so it barely touches your battery. You can change this in Settings.',
+      main: 'Set as live wallpaper', skip: 'Maybe later', act: function () { openWallpaper(); return Promise.resolve(); } }
+  ];
+  var obStep = 0;
+  function showOb(i) {
+    if (i === 1 && !hasSensor) i = 2;
+    obStep = i;
+    if (i >= OB.length) { $('onboard').hidden = true; try { localStorage.setItem('ts.onboarded', '1'); } catch (e) {} return; }
+    var s = OB[i];
+    $('obTitle').textContent = s.title; $('obText').textContent = s.text; $('obMain').textContent = s.main; $('obSkip').textContent = s.skip;
+    Array.prototype.forEach.call($('obDots').children, function (d, j) { d.className = j === i ? 'on' : ''; });
+    $('onboard').hidden = false;
+  }
+  $('obMain').addEventListener('click', function () { OB[obStep].act().then(function () { showOb(obStep + 1); }); });
+  $('obSkip').addEventListener('click', function () { showOb(obStep === 0 ? OB.length : obStep + 1); });
+
+  /* ---------- start ---------- */
+  syncUI();
+  loadSettings().then(function () {
+    applyToScene(); syncSettings();
+    if (TS) {
+      checkWallpaper(); pollSteps();
+      setInterval(pollSteps, 5000);
+      document.addEventListener('visibilitychange', function () { if (!document.hidden) { pollSteps(); checkWallpaper(); } });
+      var done = false;
+      try { done = localStorage.getItem('ts.onboarded') === '1'; } catch (e) {}
+      if (!done) showOb(0);
     }
-  }
-  $('tilt').addEventListener('click', function () {
-    if (tilt.on) { setTilt(false); return; }
-    if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      DeviceOrientationEvent.requestPermission().then(function (r) { if (r === 'granted') setTilt(true); }).catch(function () {});
-    } else { setTilt(true); }
   });
 
   /* ---------- loop ---------- */
   function resize() {
     var w = window.innerWidth, h = window.innerHeight;
-    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false); camera.aspect = w / h;
+    camera.setViewOffset(w, h, 0, h * 0.13, w, h);   // lift the tree above the home card
+    camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resize); resize();
 
@@ -451,18 +633,14 @@ input[type=range]:disabled { opacity: 0.5; }
       var fb = flyBase[i]; fp[i * 3] = fb[0] + Math.sin(tt * 0.6 + fb[3]) * 0.5; fp[i * 3 + 1] = fb[1] + Math.sin(tt * 0.8 + fb[3] * 2) * 0.4; fp[i * 3 + 2] = fb[2] + Math.cos(tt * 0.5 + fb[3]) * 0.5;
     }
     flyGeo.attributes.position.needsUpdate = true; flyMat.opacity = 0.65 + Math.sin(tt * 2.2) * 0.3;
-    if (tilt.on) {
-      var targetAz = tilt.base.theta + (tilt.g || 0) * 0.018, targetPol = Math.max(0.5, Math.min(Math.PI / 2 - 0.03, tilt.base.phi + ((tilt.b || 55) - 55) * 0.006));
-      tilt.cur.az += (targetAz - tilt.cur.az) * 0.08; tilt.cur.pol += (targetPol - tilt.cur.pol) * 0.08;
-      camera.position.setFromSpherical(new THREE.Spherical(tilt.base.radius, tilt.cur.pol, tilt.cur.az)).add(TARGET); camera.lookAt(TARGET);
-    } else controls.update();
+    controls.update();
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
   }
 
   rebuildAll();
   requestAnimationFrame(frame);
-  window.__t3 = { state: state, rebuildAll: rebuildAll, rebuildTree: rebuildTree, camera: camera, counts: function () { return { bark: bark.count, leaves: leaves.count, blooms: blooms.count }; } };
+  window.__t3 = { state: state, settings: settings, rebuildAll: rebuildAll, rebuildTree: rebuildTree, camera: camera, counts: function () { return { bark: bark.count, leaves: leaves.count, blooms: blooms.count }; } };
 })();
 </script>
 </body>

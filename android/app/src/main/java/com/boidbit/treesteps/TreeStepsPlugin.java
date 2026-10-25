@@ -1,21 +1,14 @@
 package com.boidbit.treesteps;
 
 import android.Manifest;
+import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
+import android.content.SharedPreferences;
 import android.os.Build;
-import android.os.Handler;
-import android.os.Looper;
-import android.util.Base64;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -26,17 +19,12 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
-/** Bridge for Tree3D.html: real steps, set-as-wallpaper, and opening the live wallpaper picker. */
+/** Bridge for Tree3D.html: real steps, the settings the wallpaper reads, and the live wallpaper picker. */
 @CapacitorPlugin(
     name = "TreeSteps",
     permissions = { @Permission(alias = "activity", strings = { Manifest.permission.ACTIVITY_RECOGNITION }) }
 )
 public class TreeStepsPlugin extends Plugin {
-
-    private Sensor stepSensor() {
-        SensorManager sm = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
-        return sm == null ? null : sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
-    }
 
     private boolean hasStepAccess() {
         return Build.VERSION.SDK_INT < 29 || getPermissionState("activity") == PermissionState.GRANTED;
@@ -45,7 +33,7 @@ public class TreeStepsPlugin extends Plugin {
     /** Asks for "Physical activity" permission and turns on real steps for the app and wallpaper. */
     @PluginMethod
     public void enableSteps(PluginCall call) {
-        if (stepSensor() == null) {
+        if (!StepStore.hasStepSensor(getContext())) {
             JSObject r = new JSObject();
             r.put("granted", false);
             r.put("reason", "nosensor");
@@ -73,107 +61,87 @@ public class TreeStepsPlugin extends Plugin {
         call.resolve(r);
     }
 
-    /** Reads today's steps. Falls back to the last known value if the sensor stays quiet. */
+    /** Reads today's steps once (falls back to the last known value if the sensor stays quiet). */
     @PluginMethod
     public void getSteps(PluginCall call) {
-        final Context ctx = getContext();
-        JSObject r = new JSObject();
-        final Sensor sensor = stepSensor();
-        if (sensor == null || !hasStepAccess() || !StepStore.useRealSteps(ctx)) {
+        Context ctx = getContext();
+        if (!StepStore.hasStepSensor(ctx) || !hasStepAccess() || !StepStore.useRealSteps(ctx)) {
+            JSObject r = new JSObject();
             r.put("available", false);
-            r.put("reason", sensor == null ? "nosensor" : !hasStepAccess() ? "permission" : "off");
+            r.put("reason", !StepStore.hasStepSensor(ctx) ? "nosensor" : !hasStepAccess() ? "permission" : "off");
             call.resolve(r);
             return;
         }
-        final SensorManager sm = (SensorManager) ctx.getSystemService(Context.SENSOR_SERVICE);
-        final Handler main = new Handler(Looper.getMainLooper());
-        final boolean[] done = { false };
-        final SensorEventListener[] holder = new SensorEventListener[1];
-        final Runnable[] timeout = new Runnable[1];
-
-        holder[0] = new SensorEventListener() {
-            @Override
-            public void onSensorChanged(SensorEvent e) {
-                finish(StepStore.record(ctx, e.values[0]), true);
-            }
-
-            @Override
-            public void onAccuracyChanged(Sensor s, int a) {}
-
-            private void finish(int steps, boolean fresh) {
-                if (done[0]) return;
-                done[0] = true;
-                sm.unregisterListener(this);
-                main.removeCallbacks(timeout[0]);
-                JSObject out = new JSObject();
-                out.put("available", true);
-                out.put("steps", steps);
-                out.put("fresh", fresh);
-                call.resolve(out);
-            }
-        };
-        timeout[0] = () -> {
-            if (done[0]) return;
-            done[0] = true;
-            sm.unregisterListener(holder[0]);
-            JSObject out = new JSObject();
-            out.put("available", true);
-            out.put("steps", StepStore.lastKnown(ctx));
-            out.put("fresh", false);
-            call.resolve(out);
-        };
-        sm.registerListener(holder[0], sensor, SensorManager.SENSOR_DELAY_NORMAL, main);
-        main.postDelayed(timeout[0], 2500);
+        StepStore.readOnce(ctx, (steps, fresh) -> {
+            JSObject r = new JSObject();
+            r.put("available", true);
+            r.put("steps", steps);
+            r.put("fresh", fresh);
+            call.resolve(r);
+        });
     }
 
-    /** Stores the tree look so the live wallpaper draws the same tree. */
+    /** Everything the settings screen shows, as stored for the wallpaper. */
+    @PluginMethod
+    public void getSettings(PluginCall call) {
+        Context c = getContext();
+        JSObject r = new JSObject();
+        r.put("seed", StepStore.seed(c));
+        r.put("pal", StepStore.palette(c));
+        r.put("manualSteps", StepStore.manualSteps(c));
+        r.put("useReal", StepStore.useRealSteps(c) && hasStepAccess());
+        r.put("goal", StepStore.goal(c));
+        r.put("labelStyle", StepStore.labelStyle(c));
+        r.put("labelPos", StepStore.labelPos(c));
+        r.put("labelSize", StepStore.labelSize(c));
+        r.put("intervalMin", StepStore.prefs(c).getInt("interval_min", 15));
+        r.put("tilt", StepStore.tilt(c));
+        r.put("skyMode", StepStore.skyMode(c));
+        r.put("hasSensor", StepStore.hasStepSensor(c));
+        call.resolve(r);
+    }
+
+    /** Stores any of the settings (same names as getSettings) so the live wallpaper picks them up. */
     @PluginMethod
     public void saveSettings(PluginCall call) {
-        android.content.SharedPreferences.Editor e = StepStore.prefs(getContext()).edit();
-        Integer seed = call.getInt("seed");
-        String pal = call.getString("pal");
-        Integer manual = call.getInt("manualSteps");
-        Boolean useReal = call.getBoolean("useReal");
-        if (useReal != null) e.putBoolean("use_real", useReal);
-        if (seed != null) e.putInt("seed", seed);
-        if (pal != null) e.putString("pal", pal);
-        if (manual != null) e.putInt("manual_steps", manual);
+        SharedPreferences.Editor e = StepStore.prefs(getContext()).edit();
+        putInt(e, call, "seed", "seed");
+        putInt(e, call, "manualSteps", "manual_steps");
+        putInt(e, call, "goal", "goal");
+        putInt(e, call, "intervalMin", "interval_min");
+        putString(e, call, "pal", "pal");
+        putString(e, call, "labelStyle", "label_style");
+        putString(e, call, "labelPos", "label_pos");
+        putString(e, call, "labelSize", "label_size");
+        putString(e, call, "skyMode", "sky_mode");
+        putBool(e, call, "useReal", "use_real");
+        putBool(e, call, "tilt", "tilt");
         e.apply();
         call.resolve();
     }
 
-    /** Sets a still image (a JPEG/PNG data URL) as the home screen, lock screen or both. */
+    private static void putInt(SharedPreferences.Editor e, PluginCall call, String key, String pref) {
+        Integer v = call.getInt(key);
+        if (v != null) e.putInt(pref, v);
+    }
+
+    private static void putString(SharedPreferences.Editor e, PluginCall call, String key, String pref) {
+        String v = call.getString(key);
+        if (v != null) e.putString(pref, v);
+    }
+
+    private static void putBool(SharedPreferences.Editor e, PluginCall call, String key, String pref) {
+        Boolean v = call.getBoolean(key);
+        if (v != null) e.putBoolean(pref, v);
+    }
+
+    /** Whether Tree Steps is the current live wallpaper. */
     @PluginMethod
-    public void setWallpaper(PluginCall call) {
-        final String image = call.getString("image");
-        final String target = call.getString("target", "both");
-        if (image == null) {
-            call.reject("No image");
-            return;
-        }
-        new Thread(() -> {
-            try {
-                String b64 = image.contains(",") ? image.substring(image.indexOf(',') + 1) : image;
-                byte[] bytes = Base64.decode(b64, Base64.DEFAULT);
-                Bitmap bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                if (bmp == null) {
-                    call.reject("Could not read the image");
-                    return;
-                }
-                WallpaperManager wm = WallpaperManager.getInstance(getContext());
-                if (Build.VERSION.SDK_INT >= 24) {
-                    int flags = "home".equals(target) ? WallpaperManager.FLAG_SYSTEM
-                        : "lock".equals(target) ? WallpaperManager.FLAG_LOCK
-                        : WallpaperManager.FLAG_SYSTEM | WallpaperManager.FLAG_LOCK;
-                    wm.setBitmap(bmp, null, true, flags);
-                } else {
-                    wm.setBitmap(bmp);
-                }
-                call.resolve();
-            } catch (Exception ex) {
-                call.reject("Could not set wallpaper: " + ex.getMessage());
-            }
-        }).start();
+    public void wallpaperStatus(PluginCall call) {
+        WallpaperInfo info = WallpaperManager.getInstance(getContext()).getWallpaperInfo();
+        JSObject r = new JSObject();
+        r.put("active", info != null && info.getComponent().equals(new ComponentName(getContext(), TreeWallpaperService.class)));
+        call.resolve(r);
     }
 
     /** Opens the system screen to apply the Tree Steps live wallpaper. */

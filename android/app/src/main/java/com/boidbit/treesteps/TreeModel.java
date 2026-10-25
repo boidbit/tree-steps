@@ -20,7 +20,7 @@ final class TreeModel {
     private static final int BARK_MAX = 4000, LEAF_MAX = 14000, BLOOM_MAX = 2500;
 
     final int seed;
-    final double t;                       // growth 0..1 (steps / 10000)
+    final double t;                       // growth 0..1 (steps / daily goal)
     final double[][] pal;
 
     int nb, nl, nbl;
@@ -38,9 +38,9 @@ final class TreeModel {
     private final double P;
     private final double[] wood, twig;
 
-    TreeModel(int seed, String palName, int steps) {
+    TreeModel(int seed, String palName, int steps, int goal) {
         this.seed = seed;
-        this.t = clamp01(steps / 10000.0);
+        this.t = clamp01(steps / (double) Math.max(1, goal));
         this.pal = palette(palName);
         levels = (int) Math.round(6 + DETAIL * 3);
         P = 0.3 + t * (levels + 0.2);

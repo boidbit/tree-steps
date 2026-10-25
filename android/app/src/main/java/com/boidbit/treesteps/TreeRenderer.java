@@ -9,6 +9,7 @@ import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 
+import java.text.NumberFormat;
 import java.util.Arrays;
 
 /**
@@ -49,10 +50,10 @@ final class TreeRenderer {
      * @param fitR horizontal radius used to frame the camera
      * @param restAz camera angle without tilt (only home-page swipes), anchors the sun and moon
      * @param hour local time as hours (0-24), picks the sky
-     * @param label text under the tree, or null for none
+     * @param label today's steps to show, or null for none
      */
     void draw(Canvas c, int W, int H, TreeModel m, float fitY, float fitR, double az, double el, double restAz,
-              double hour, String label) {
+              double hour, Label label) {
         double[][] pal = m.pal;
         focal = (H / 2.0) / Math.tan(VFOV / 2);
         scx = W / 2.0;
@@ -231,15 +232,61 @@ final class TreeRenderer {
             }
         }
 
-        /* today's steps, just under the tree */
-        if (label != null && project(0, 0, 0)) {
-            textPaint.setColor(0xf2ffffff);
-            textPaint.setTextAlign(Paint.Align.CENTER);
-            textPaint.setTextSize(W * 0.046f);
-            textPaint.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-            textPaint.setShadowLayer(W * 0.012f, 0, W * 0.003f, 0x99000000);
-            float labelY = Math.min(projY + H * 0.065f, H * 0.82f);
-            c.drawText(label, W / 2f, labelY, textPaint);
+        if (label != null) drawLabel(c, W, H, label, pal);
+    }
+
+    /** How today's steps are shown on the wallpaper (chosen in the app's settings). */
+    static final class Label {
+        final String style, pos;   // style: steps | goal | bar | percent; pos: tree | bottom
+        final float scale;
+        final int steps, goal;
+
+        Label(String style, String pos, String size, int steps, int goal) {
+            this.style = style;
+            this.pos = pos;
+            this.scale = "s".equals(size) ? 0.8f : "l".equals(size) ? 1.3f : 1f;
+            this.steps = steps;
+            this.goal = Math.max(1, goal);
+        }
+    }
+
+    private void drawLabel(Canvas c, int W, int H, Label l, double[][] pal) {
+        float y;
+        if ("bottom".equals(l.pos) || !project(0, 0, 0)) y = H * 0.80f;   // above the lock screen shortcuts
+        else y = Math.min(projY + H * 0.065f, H * 0.82f);
+
+        NumberFormat nf = NumberFormat.getIntegerInstance();
+        String text;
+        switch (l.style) {
+            case "steps": text = nf.format(l.steps) + " steps"; break;
+            case "percent": text = Math.min(999, Math.round(l.steps * 100f / l.goal)) + "% of goal"; break;
+            case "bar": text = nf.format(l.steps) + " / " + nf.format(l.goal); break;
+            default: text = nf.format(l.steps) + " / " + nf.format(l.goal) + " steps"; break;
+        }
+        float size = W * 0.046f * l.scale;
+        textPaint.setColor(0xf2ffffff);
+        textPaint.setTextAlign(Paint.Align.CENTER);
+        textPaint.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        textPaint.setShadowLayer(W * 0.012f, 0, W * 0.003f, 0x99000000);
+
+        if (!"bar".equals(l.style)) {
+            textPaint.setTextSize(size);
+            c.drawText(text, W / 2f, y, textPaint);
+            return;
+        }
+        // progress bar with a smaller count above it
+        textPaint.setTextSize(size * 0.8f);
+        c.drawText(text, W / 2f, y - size * 0.35f, textPaint);
+        float bw = W * 0.46f * l.scale, bh = Math.max(4, size * 0.32f), bx = (W - bw) / 2f, by = y + size * 0.1f;
+        float frac = Math.min(1f, l.steps / (float) l.goal);
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(0x40ffffff);
+        oval.set(bx, by, bx + bw, by + bh);
+        c.drawRoundRect(oval, bh / 2, bh / 2, paint);
+        if (frac > 0) {
+            paint.setColor(TreeModel.argb(TreeModel.mix(pal[4], new double[] { 255, 255, 255 }, 0.25)));
+            oval.set(bx, by, bx + Math.max(bh, bw * frac), by + bh);
+            c.drawRoundRect(oval, bh / 2, bh / 2, paint);
         }
     }
 
