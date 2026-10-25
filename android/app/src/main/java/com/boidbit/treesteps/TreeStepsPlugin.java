@@ -8,7 +8,11 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Build;
+import android.util.Base64;
+
+import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -20,10 +24,16 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
-/** Bridge for Tree3D.html: real steps, the settings the wallpaper reads, and the live wallpaper picker. */
+import java.io.File;
+import java.io.FileOutputStream;
+
+/** Bridge for Tree3D.html: real steps and history, settings, reminders, sharing, and the live wallpaper picker. */
 @CapacitorPlugin(
     name = "TreeSteps",
-    permissions = { @Permission(alias = "activity", strings = { Manifest.permission.ACTIVITY_RECOGNITION }) }
+    permissions = {
+        @Permission(alias = "activity", strings = { Manifest.permission.ACTIVITY_RECOGNITION }),
+        @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS })
+    }
 )
 public class TreeStepsPlugin extends Plugin {
 
@@ -99,6 +109,10 @@ public class TreeStepsPlugin extends Plugin {
         r.put("intervalMin", StepStore.prefs(c).getInt("interval_min", 15));
         r.put("tilt", StepStore.tilt(c));
         r.put("skyMode", StepStore.skyMode(c));
+        r.put("remindOn", StepStore.remindOn(c) && Reminders.canNotify(c));
+        r.put("remindHour", StepStore.remindHour(c));
+        r.put("heightCm", StepStore.prefs(c).getInt("height_cm", 170));
+        r.put("weightKg", StepStore.prefs(c).getInt("weight_kg", 70));
         r.put("hasSensor", StepStore.hasStepSensor(c));
         call.resolve(r);
     }
@@ -107,15 +121,26 @@ public class TreeStepsPlugin extends Plugin {
     @PluginMethod
     public void getHistory(PluginCall call) {
         JSArray days = new JSArray();
-        for (String[] d : StepStore.history(getContext())) {
+        Context c = getContext();
+        for (String[] d : StepStore.history(c)) {
             JSObject o = new JSObject();
-            o.put("day", d[0]);
-            o.put("steps", Integer.parseInt(d[1]));
+            try {
+                o.put("day", d[0]);
+                o.put("steps", Integer.parseInt(d[1]));
+                o.put("goal", d.length > 2 ? Integer.parseInt(d[2]) : StepStore.goal(c));
+                o.put("design", d.length > 3 ? d[3] : StepStore.design(c));
+                o.put("seed", d.length > 4 ? Integer.parseInt(d[4]) : StepStore.seed(c));
+            } catch (NumberFormatException e) {
+                continue;
+            }
             days.put(o);
         }
+        JSArray hours = new JSArray();
+        for (int h : StepStore.hours(c)) hours.put(h);
         JSObject r = new JSObject();
         r.put("today", StepStore.todayKey());
         r.put("days", days);
+        r.put("hours", hours);
         call.resolve(r);
     }
 
@@ -135,7 +160,13 @@ public class TreeStepsPlugin extends Plugin {
         putString(e, call, "skyMode", "sky_mode");
         putBool(e, call, "useReal", "use_real");
         putBool(e, call, "tilt", "tilt");
+        putBool(e, call, "remindOn", "remind_on");
+        putInt(e, call, "remindHour", "remind_hour");
+        putInt(e, call, "heightCm", "height_cm");
+        putInt(e, call, "weightKg", "weight_kg");
         e.apply();
+        Reminders.schedule(getContext());
+        TreeWidget.updateAll(getContext());
         call.resolve();
     }
 
@@ -152,6 +183,54 @@ public class TreeStepsPlugin extends Plugin {
     private static void putBool(SharedPreferences.Editor e, PluginCall call, String key, String pref) {
         Boolean v = call.getBoolean(key);
         if (v != null) e.putBoolean(pref, v);
+    }
+
+    /** Asks for notification permission (Android 13+) and turns on the evening reminder. */
+    @PluginMethod
+    public void enableReminders(PluginCall call) {
+        if (Reminders.canNotify(getContext())) remindersDecided(call);
+        else requestPermissionForAlias("notifications", call, "notificationsResult");
+    }
+
+    @PermissionCallback
+    private void notificationsResult(PluginCall call) {
+        remindersDecided(call);
+    }
+
+    private void remindersDecided(PluginCall call) {
+        boolean ok = Reminders.canNotify(getContext());
+        StepStore.prefs(getContext()).edit().putBoolean("remind_on", ok).apply();
+        Reminders.schedule(getContext());
+        JSObject r = new JSObject();
+        r.put("granted", ok);
+        call.resolve(r);
+    }
+
+    /** Shares an image (a JPEG data URL) with optional text through Android's share sheet. */
+    @PluginMethod
+    public void shareImage(PluginCall call) {
+        String image = call.getString("image");
+        String text = call.getString("text", "");
+        if (image == null) {
+            call.reject("No image");
+            return;
+        }
+        try {
+            byte[] bytes = Base64.decode(image.substring(image.indexOf(',') + 1), Base64.DEFAULT);
+            File dir = new File(getContext().getCacheDir(), "share");
+            if (!dir.exists() && !dir.mkdirs()) throw new java.io.IOException("no cache folder");
+            File file = new File(dir, "tree.jpg");
+            try (FileOutputStream out = new FileOutputStream(file)) { out.write(bytes); }
+            Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", file);
+            Intent send = new Intent(Intent.ACTION_SEND).setType("image/jpeg")
+                .putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_TEXT, text)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent chooser = Intent.createChooser(send, "Share your tree").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            getActivity().startActivity(chooser);
+            call.resolve();
+        } catch (Exception ex) {
+            call.reject("Could not share: " + ex.getMessage());
+        }
     }
 
     /** Whether Tree Steps is the current live wallpaper. */

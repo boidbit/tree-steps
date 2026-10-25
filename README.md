@@ -9,18 +9,25 @@ An illustrated tree that grows with the steps you walk, in the app and as a live
 - `store/icon-512.png` — the app icon for a store listing
 - `android/` — the Capacitor Android project, with the native parts in `app/src/main/java/com/boidbit/treesteps/`:
   - `TreeStepsPlugin` — real steps, settings and opening the live wallpaper picker, called from `Tree3D.html`
-  - `StepStore` — turns the phone's step counter into "steps today" and stores the settings the wallpaper reads
+  - `StepStore` — turns the phone's step counter into "steps today", keeps the history and today's hours, and stores the settings the wallpaper reads
+  - `TreeWidget` — the home screen widget; `Reminders`, `ReminderReceiver` — the evening reminder and re-arming it after a reboot
   - `TreeWallpaperService`, `ArtRenderer` — the live wallpaper; `ArtRenderer` is a line-for-line port of `lib/art.js`, so a seed gives the same picture in both. Change them together.
   - the launcher icon is a vector (`res/drawable/ic_launcher_tree.xml` on `res/drawable-v24/ic_launcher_sky.xml`), with PNG copies in `res/mipmap-*` for older Android
 
 ## In the Android app
 
-The first launch walks through three screens: what the app does, allowing step counting ("Physical activity"), and setting the live wallpaper. After that the home screen shows today's steps against your goal with the tree's growth stage, distance (average 0.76 m stride), calories (0.04 kcal a step), walking minutes (about 100 steps a minute), a seven-day chart, the goal streak, and a **Set as live wallpaper** button. Finished days are saved on the phone (last 60), so the chart and streak fill in from the day you start. Back closes settings or 3D first; pressing back twice exits.
+The first launch walks through three screens: what the app does, allowing step counting ("Physical activity"), and setting the live wallpaper. After that the home screen shows today's steps against your goal with the tree's growth stage, distance (stride from your height), calories (scaled by your weight), walking minutes (about 100 steps a minute), a seven-day chart, the goal streak, a **share** button and **Set as live wallpaper**. Finished days are saved on the phone (last 60, with that day's goal, design and seed), so the chart, streak and forest fill in from the day you start.
+
+The tree icon opens **Your journey**: totals, today by hour (steps between two readings count toward the later hour), **My forest** (each day's tree, redrawn from its design and seed; tap one to share it as a picture) and **achievements**.
+
+There is also a home screen **widget** (today's tree and steps; Android refreshes it every 30 minutes, and new readings refresh it every 100 steps) and an optional **evening reminder** that fires at the chosen hour only if today's goal isn't reached (needs notification permission on Android 13+). Back closes settings or 3D first; pressing back twice exits.
 
 The gear opens **Settings** (light theme, with a live preview of the wallpaper at the top):
 
 | Section | Settings |
 |---|---|
+| About you | Height (sets the stride) · Weight (for calories) |
+| Reminders | Evening reminder · time (5 to 9 PM) |
 | Steps | Count my real steps · Daily goal (5k–15k; the tree is fully grown at the goal) · Preview steps (when real steps are off) |
 | Wallpaper | Update the tree: **Live** (grows as you walk while the wallpaper is on screen) or every 5 / 15 / 30 / 60 minutes (checks steps when you unlock, then on that interval) · Tilt to look around (parallax) |
 | Step counter on the wallpaper | Style: off, steps, steps / goal, progress bar, percent · Position: under the tree or bottom · Size |

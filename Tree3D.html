@@ -94,6 +94,36 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .val { font-variant-numeric: tabular-nums; color: var(--s-muted); }
 .about { color: var(--s-muted); font-size: 12.5px; text-align: center; margin: 8px 0 0; }
 
+/* home: chips with a share button beside them */
+.chiprow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mini { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(255,255,255,0.1); color: #e8edf5; }
+.mini svg, .iconbtn.leaf svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+/* journey: totals, hours, forest, achievements (inside the light .sheet) */
+.totals { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.tot { padding: 12px 14px; border-radius: 18px; background: var(--s-card); border: 1px solid var(--s-line); display: flex; flex-direction: column; }
+.tot b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.tot span { color: var(--s-muted); font-size: 12.5px; }
+.hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; height: 96px; align-items: end; }
+.hours i { display: block; border-radius: 3px 3px 1px 1px; background: #ffb48f; min-height: 2px; }
+.hours i.now { background: var(--s-acc); }
+.hourlabels { display: grid; grid-template-columns: repeat(4, 1fr); color: var(--s-muted); font-size: 11px; margin-top: 4px; }
+.forest { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ftile { position: relative; padding: 0; border: 0; border-radius: 12px; overflow: hidden; background: #dfe3ea; text-align: left; }
+.ftile canvas { width: 100%; aspect-ratio: 9 / 16; display: block; }
+.ftile .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 7px 6px; background: linear-gradient(transparent, rgba(0,0,0,0.6)); color: #fff; font-size: 11.5px; line-height: 1.25; }
+.ftile .cap b { display: block; font-size: 12.5px; }
+.ftile .met { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 50%; background: #5fb35a; display: grid; place-items: center; }
+.ftile .met svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.empty { color: var(--s-muted); font-size: 13.5px; }
+.badges { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.badge { display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: 14px; background: var(--s-raised); }
+.badge .medal { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, #ffcf7a, #ff8a5c); color: #fff; font-weight: 800; font-size: 13px; box-shadow: 0 2px 6px rgba(255,122,69,0.35); }
+.badge b { display: block; font-size: 13.5px; }
+.badge span { color: var(--s-muted); font-size: 12px; line-height: 1.3; }
+.badge.locked .medal { background: #d5d9e2; box-shadow: none; }
+.badge.locked b { color: var(--s-muted); }
+
 /* onboarding */
 .onboard { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; padding: 16px; background: linear-gradient(to top, #080a10 42%, rgba(8,10,16,0.9) 58%, rgba(8,10,16,0.25)); }
 .obcard { width: 100%; max-width: 480px; margin-bottom: max(8px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; }
@@ -114,17 +144,19 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 
 <header class="top">
   <div><b>Tree Steps</b><span id="topSub"></span></div>
-  <div class="topbtns"><button class="pillbtn" id="toggle3D" type="button">3D</button>
+  <div class="topbtns"><button class="iconbtn leaf" id="openJourney" type="button" aria-label="Your journey and forest"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21V15M7 15c-3 0-4-2-4-4 0-3 2-4 4-6 2 2 4 3 4 6 0 2-1 4-4 4zM17 21v-8M17 13c-2.5 0-3.5-1.7-3.5-3.5S15 6 17 4c2 2 3.5 3.7 3.5 5.5S19.5 13 17 13z"/></svg></button>
+  <button class="pillbtn" id="toggle3D" type="button">3D</button>
   <button class="iconbtn" id="openSettings" type="button" aria-label="Settings">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
   </button></div>
 </header>
 
 <section class="home" id="home" aria-label="Today">
-  <div class="chips">
+  <div class="chiprow"><div class="chips">
     <span class="chip" id="stageChip"></span>
     <span class="chip streak" id="streakChip" hidden><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c1 3.5 5 5.5 5 10.5A5 5 0 0 1 7 12.5c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-6 1-9z"/></svg><span id="streakTxt"></span></span>
   </div>
+  <button class="mini" id="shareBtn" type="button" aria-label="Share today's tree"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button></div>
   <div class="count"><span class="big" id="stepsNum">0</span><span class="muted" id="goalTxt">of 10,000 steps</span></div>
   <div class="progress" aria-hidden="true"><i id="prog"></i></div>
   <p class="note" id="homeNote"></p>
@@ -169,6 +201,18 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
       <input type="range" id="previewSteps" min="0" max="10000" step="100" aria-label="Preview steps"></div>
   </div></div>
 
+  <div class="group"><h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>About you</h2><div class="box">
+    <div class="item"><div class="switch"><span class="lab">Height</span><span class="val" id="heightVal"></span></div>
+      <input type="range" id="height" min="130" max="210" step="1" aria-label="Height in centimetres"><span class="sub" id="strideSub"></span></div>
+    <div class="item"><div class="switch"><span class="lab">Weight</span><span class="val" id="weightVal"></span></div>
+      <input type="range" id="weight" min="35" max="150" step="1" aria-label="Weight in kilograms"><span class="sub">Only used to estimate calories, on this phone.</span></div>
+  </div></div>
+
+  <div class="group"><h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>Reminders</h2><div class="box">
+    <div class="item"><label class="switch"><span class="lab">Evening reminder</span><input type="checkbox" id="remind" role="switch"></label>
+      <span class="sub" id="remindSub"></span><div class="seg" id="remindSeg"></div></div>
+  </div></div>
+
   <div class="group"><h2><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 18h4"/></svg>Wallpaper</h2><div class="box">
     <div class="item"><span class="lab">Update the tree</span><span class="sub" id="intervalSub"></span><div class="seg" id="intervalSeg"></div></div>
     <div class="item"><label class="switch"><span class="lab">Tilt to look around</span><input type="checkbox" id="tilt" role="switch"></label>
@@ -182,6 +226,30 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   </div></div>
 
   <p class="about">Tree Steps · steps are counted on your phone only</p>
+</div>
+
+<div class="sheet" id="journey" hidden role="dialog" aria-label="Your journey">
+  <div class="sheethead"><h1>Your journey</h1><button class="done" id="closeJourney" type="button">Done</button></div>
+
+  <div class="group"><div class="totals">
+    <div class="tot"><b id="jSteps">0</b><span>steps in all</span></div>
+    <div class="tot"><b id="jKm">0</b><span>km walked</span></div>
+    <div class="tot"><b id="jBest">0</b><span>best day</span></div>
+    <div class="tot"><b id="jStreak">0</b><span>best streak (days)</span></div>
+  </div></div>
+
+  <div class="group"><h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Today by hour</h2><div class="box">
+    <div class="item"><div class="hours" id="hours"></div><div class="hourlabels"><span>12 am</span><span>6 am</span><span>12 pm</span><span>6 pm</span></div>
+      <span class="sub" id="hoursSub"></span></div>
+  </div></div>
+
+  <div class="group"><h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21V15M7 15c-3 0-4-2-4-4 0-3 2-4 4-6 2 2 4 3 4 6 0 2-1 4-4 4zM17 21v-8M17 13c-2.5 0-3.5-1.7-3.5-3.5S15 6 17 4c2 2 3.5 3.7 3.5 5.5S19.5 13 17 13zM2 21h20"/></svg>My forest</h2><div class="box">
+    <div class="item"><span class="sub">One tree for every day you walk. Tap a tree to share it.</span><div class="forest" id="forest"></div></div>
+  </div></div>
+
+  <div class="group"><h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="6"/><path d="M8.5 14 7 22l5-3 5 3-1.5-8"/></svg>Achievements</h2><div class="box">
+    <div class="item"><div class="badges" id="badges"></div></div>
+  </div></div>
 </div>
 
 <div class="onboard" id="onboard" hidden>
@@ -500,7 +568,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   var TS = (window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform() && Capacitor.registerPlugin)
     ? Capacitor.registerPlugin('TreeSteps') : null;
   var DEFAULTS = { seed: 48213, design: 'banyan', manualSteps: 6000, useReal: false, goal: 10000, labelStyle: 'goal',
-    labelPos: 'tree', labelSize: 'm', intervalMin: 15, tilt: false, skyMode: 'time' };
+    labelPos: 'tree', labelSize: 'm', intervalMin: 15, tilt: false, skyMode: 'time', remindOn: false, remindHour: 19, heightCm: 170, weightKg: 70 };
   var settings = {}, k;
   for (k in DEFAULTS) settings[k] = DEFAULTS[k];
   var realSteps = 0, hasSensor = true, walking = false, wallActive = false, shownSeed = null, shownDesign = null;
@@ -509,7 +577,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   var ORIGIN = { banyan: 'India', oak: 'Europe', sakura: 'Japan', maple: 'Canada', pine: 'Scandinavia', jacaranda: 'South America' };
   var SKIES = [['time', 'Follow the sun', 'linear-gradient(135deg,#5d9be0,#f5b880 55%,#182a52)'], ['dawn', 'Dawn', 'linear-gradient(#6b6aa6,#f6c4a4)'],
     ['day', 'Day', 'linear-gradient(#3d7fd1,#bfdaf0)'], ['sunset', 'Sunset', 'linear-gradient(#5a5a92,#f5b880)'], ['night', 'Night', 'linear-gradient(#060d24,#22375f)']];
-  var history = [];
+  var history = [], hours = [];
 
   var saveTimer = 0, pending = {};
   function store(patch) {
@@ -586,8 +654,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     $('homeNote').textContent = note;
     var pct = Math.round(Math.min(1, s / g) * 100);
     $('stageChip').textContent = stageName(s / g) + ' · ' + pct + '%';
-    $('stKm').textContent = (s * 0.762 / 1000).toFixed(1);       // an average stride
-    $('stKcal').textContent = fmt(Math.round(s * 0.04));
+    $('stKm').textContent = (s * stride() / 1000).toFixed(1);
+    $('stKcal').textContent = fmt(Math.round(s * kcalPerStep()));
     $('stMin').textContent = fmt(Math.round(s / 100));          // about 100 steps a minute
     renderWeek(s, g);
     $('stepsBtn').hidden = !TS || settings.useReal || !hasSensor;
@@ -633,10 +701,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   }
   function loadHistory() {
     if (TS) {
-      TS.getHistory().then(function (r) { history = r.days || []; syncUI(); }).catch(function () {});
+      TS.getHistory().then(function (r) { history = r.days || []; hours = r.hours || []; syncUI(); checkBadges(); }).catch(function () {});
     } else if (q.has('demo') && !history.length) {
-      // browser preview only: a made-up week
-      for (var i = 1; i < 7; i++) { var d = new Date(); d.setDate(d.getDate() - i); history.push({ day: dayKey(d), steps: 3000 + (i * 2617 % 9000) }); }
+      // browser preview only: a made-up few weeks
+      for (var i = 1; i < 20; i++) {
+        var d = new Date(); d.setDate(d.getDate() - i);
+        history.push({ day: dayKey(d), steps: 3000 + (i * 2617 % 9000), goal: settings.goal, design: TreeArt.order[i % 6], seed: 48213 + i });
+      }
+      for (var h = 0; h < 24; h++) hours.push(h > 6 && h < 22 ? (h * 977 % 900) : 0);
       syncUI();
     }
   }
@@ -739,6 +811,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     $('previewVal').textContent = fmt(Math.min(settings.manualSteps, settings.goal));
     $('skySub').textContent = settings.skyMode === 'time' ? 'Moves with the real sun for your time zone: morning, day, evening, night.' : 'Always this light, whatever the time.';
     drawPreview();
+    syncAbout();
   }
 
   $('useReal').addEventListener('change', function () {
@@ -796,8 +869,162 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   $('obMain').addEventListener('click', function () { OB[obStep].act().then(function () { showOb(obStep + 1); }); });
   $('obSkip').addEventListener('click', function () { showOb(obStep === 0 ? OB.length : obStep + 1); });
 
+  /* ---------- your journey: totals, today by hour, the forest of past days, achievements ---------- */
+  function stride() { return settings.heightCm * 0.415 / 100; }            // metres per step, from height
+  function kcalPerStep() { return 0.04 * settings.weightKg / 70; }
+  function keyDate(key) { return new Date(+key.slice(0, 4), +key.slice(4, 6) - 1, +key.slice(6, 8)); }
+  function shortDate(key) { return keyDate(key).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); }
+  /* every day we know about, newest first, with today on top */
+  function allDays() {
+    var today = { day: dayKey(new Date()), steps: shownSteps(), goal: settings.goal, design: settings.design, seed: settings.seed, today: true };
+    return [today].concat(history.filter(function (h) { return h.day !== today.day; }));
+  }
+  function journeyStats(days) {
+    var total = 0, best = 0, goalDays = 0, designs = {}, run = 0, bestRun = 0, prev = null, prevMet = false;
+    days.slice().reverse().forEach(function (d) {                      // oldest first
+      total += d.steps; best = Math.max(best, d.steps);
+      var met = d.steps >= (d.goal || settings.goal);
+      if (met) goalDays++;
+      if (d.steps >= 1000) designs[d.design] = 1;
+      var follows = prev && Math.round((keyDate(d.day) - keyDate(prev)) / 86400000) === 1;
+      run = met ? (follows && prevMet ? run + 1 : 1) : 0;
+      bestRun = Math.max(bestRun, run);
+      prev = d.day; prevMet = met;
+    });
+    return { total: total, best: best, goalDays: goalDays, km: total * stride() / 1000, designs: Object.keys(designs).length, bestStreak: bestRun };
+  }
+  var BADGES = [
+    ['1K', 'First steps', 'Walk 1,000 steps in a day', function (a) { return a.best >= 1000; }],
+    ['1', 'Full bloom', 'Reach your daily goal', function (a) { return a.goalDays >= 1; }],
+    ['10K', '10K club', 'Walk 10,000 steps in a day', function (a) { return a.best >= 10000; }],
+    ['15K', 'Trailblazer', 'Walk 15,000 steps in a day', function (a) { return a.best >= 15000; }],
+    ['3', 'On a roll', 'Reach your goal 3 days in a row', function (a) { return a.bestStreak >= 3; }],
+    ['7', 'Green week', 'Reach your goal 7 days in a row', function (a) { return a.bestStreak >= 7; }],
+    ['10', 'Young forest', 'Grow 10 full trees', function (a) { return a.goalDays >= 10; }],
+    ['30', 'Old-growth forest', 'Grow 30 full trees', function (a) { return a.goalDays >= 30; }],
+    ['50', '50 km', 'Walk 50 km in all', function (a) { return a.km >= 50; }],
+    ['100', '100 km', 'Walk 100 km in all', function (a) { return a.km >= 100; }],
+    ['6', 'World traveller', 'Grow all six kinds of tree', function (a) { return a.designs >= 6; }]
+  ];
+  /* tells you once when a new achievement unlocks */
+  function checkBadges() {
+    var a = journeyStats(allDays()), seen = {};
+    try { seen = JSON.parse(localStorage.getItem('ts.badges') || '{}'); } catch (e) {}
+    var fresh = BADGES.filter(function (b) { return b[3](a) && !seen[b[1]]; });
+    fresh.forEach(function (b) { seen[b[1]] = 1; });
+    if (fresh.length) {
+      try { localStorage.setItem('ts.badges', JSON.stringify(seen)); } catch (e) {}
+      toast('Achievement unlocked: ' + fresh[fresh.length - 1][1]);
+    }
+  }
+
+  var forestToken = 0;
+  function renderJourney() {
+    var days = allDays(), a = journeyStats(days), i;
+    $('jSteps').textContent = fmt(a.total);
+    $('jKm').textContent = a.km.toFixed(1);
+    $('jBest').textContent = fmt(a.best);
+    $('jStreak').textContent = a.bestStreak;
+    // today by hour
+    var hrs = $('hours'), top = Math.max(1, Math.max.apply(null, hours.concat([0]))), nowH = new Date().getHours();
+    hrs.innerHTML = '';
+    for (i = 0; i < 24; i++) {
+      var bar = document.createElement('i'); bar.style.height = Math.max(2, (hours[i] || 0) / top * 100) + '%';
+      if (i === nowH) bar.className = 'now';
+      bar.title = (hours[i] || 0) + ' steps';
+      hrs.appendChild(bar);
+    }
+    var peak = hours.indexOf(Math.max.apply(null, hours.concat([0])));
+    $('hoursSub').textContent = !settings.useReal ? 'Turn on real steps to see when you walk.'
+      : top <= 1 ? 'No steps counted yet today.'
+      : 'Most steps around ' + new Date(2000, 0, 1, peak).toLocaleTimeString(undefined, { hour: 'numeric' }) + '. Steps between two readings count toward the later hour.';
+    // the forest: one small tree per day, drawn a few at a time so the sheet opens quickly
+    var forest = $('forest'), token = ++forestToken, shown = days.filter(function (d) { return d.today || d.steps > 0; }).slice(0, 60);
+    forest.innerHTML = '';
+    if (!shown.length) forest.innerHTML = '<p class="empty">Your forest starts today.</p>';
+    shown.forEach(function (d, n) {
+      var tile = document.createElement('button'), cv = document.createElement('canvas'), cap = document.createElement('span');
+      tile.type = 'button'; tile.className = 'ftile'; tile.setAttribute('aria-label', 'Share the tree from ' + shortDate(d.day));
+      cv.width = 180; cv.height = 320;
+      cap.className = 'cap'; cap.innerHTML = '<b></b>'; cap.firstChild.textContent = d.today ? 'Today' : shortDate(d.day);
+      cap.appendChild(document.createTextNode(fmt(d.steps) + ' steps'));
+      tile.appendChild(cv); tile.appendChild(cap);
+      if (d.steps >= (d.goal || settings.goal)) {
+        var met = document.createElement('span'); met.className = 'met';
+        met.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>'; tile.appendChild(met);
+      }
+      tile.addEventListener('click', function () { shareTree(d); });
+      forest.appendChild(tile);
+      setTimeout(function () {
+        if (token !== forestToken) return;
+        TreeArt.draw(cv.getContext('2d'), cv.width, cv.height, { seed: d.seed, design: d.design, t: d.steps / Math.max(1, d.goal || settings.goal), sky: d.today ? settings.skyMode : 'day', parX: 0, lift: 0, label: null });
+      }, 30 * n);
+    });
+    // achievements
+    var bx = $('badges');
+    bx.innerHTML = '';
+    BADGES.forEach(function (b) {
+      var el = document.createElement('div'), got = b[3](a);
+      el.className = 'badge' + (got ? '' : ' locked');
+      el.innerHTML = '<span class="medal"></span><div><b></b><span class="desc"></span></div>';
+      el.querySelector('.medal').textContent = b[0]; el.querySelector('b').textContent = b[1]; el.querySelector('.desc').textContent = b[2];
+      bx.appendChild(el);
+    });
+  }
+  function openJourney() { renderJourney(); $('journey').hidden = false; $('journey').scrollTop = 0; }
+  function closeJourney() { $('journey').hidden = true; forestToken++; }
+  $('openJourney').addEventListener('click', openJourney);
+  $('closeJourney').addEventListener('click', closeJourney);
+
+  /* ---------- share a day's tree as a picture ---------- */
+  function shareTree(d) {
+    d = d || allDays()[0];
+    var cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1920;
+    var c = cv.getContext('2d'), goal = d.goal || settings.goal;
+    TreeArt.draw(c, 1080, 1920, { seed: d.seed, design: d.design, t: d.steps / Math.max(1, goal), now: Date.now(), sky: d.today ? settings.skyMode : 'day', parX: 0, lift: 0,
+      label: { style: 'goal', pos: 'tree', size: 'l', steps: d.steps, goal: goal } });
+    // a footer with the app name and the day
+    var g = c.createLinearGradient(0, 1700, 0, 1920); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.55)');
+    c.fillStyle = g; c.fillRect(0, 1700, 1080, 220);
+    c.fillStyle = '#fff'; c.textAlign = 'center';
+    c.font = '700 54px "Segoe UI", Roboto, sans-serif'; c.fillText('Tree Steps', 540, 1820);
+    c.font = '500 34px "Segoe UI", Roboto, sans-serif'; c.fillText((d.today ? 'Today' : shortDate(d.day)) + ' · ' + TreeArt.designs[d.design].name, 540, 1872);
+    var url = cv.toDataURL('image/jpeg', 0.9);
+    var text = (d.today ? 'I walked ' + fmt(d.steps) + ' steps today' : 'On ' + shortDate(d.day) + ' I walked ' + fmt(d.steps) + ' steps')
+      + ' and grew a ' + TreeArt.designs[d.design].name + ' in Tree Steps.';
+    if (TS) { TS.shareImage({ image: url, text: text }).catch(function (e) { toast(e.message || 'Could not share'); }); return; }
+    var a = document.createElement('a'); a.href = url; a.download = 'tree-steps-' + d.day + '.jpg'; a.click();
+  }
+  $('shareBtn').addEventListener('click', function () { shareTree(); });
+
+  /* ---------- about you, reminders ---------- */
+  seg('remindSeg', [[17, '5 PM'], [18, '6 PM'], [19, '7 PM'], [20, '8 PM'], [21, '9 PM']], 'remindHour');
+  $('height').addEventListener('input', function () { store({ heightCm: parseInt($('height').value, 10) }); syncAbout(); syncUI(); });
+  $('weight').addEventListener('input', function () { store({ weightKg: parseInt($('weight').value, 10) }); syncAbout(); syncUI(); });
+  $('remind').addEventListener('change', function () {
+    if (!$('remind').checked) { store({ remindOn: false }); syncAbout(); return; }
+    if (!TS) { toast('Reminders work in the Android app'); $('remind').checked = false; return; }
+    TS.enableReminders().then(function (r) {
+      settings.remindOn = !!r.granted;
+      toast(r.granted ? 'Reminder set' : 'Allow notifications to get the reminder');
+      syncAbout();
+    }).catch(function () { $('remind').checked = false; });
+  });
+  function syncAbout() {
+    $('height').value = String(settings.heightCm); $('heightVal').textContent = settings.heightCm + ' cm';
+    $('weight').value = String(settings.weightKg); $('weightVal').textContent = settings.weightKg + ' kg';
+    $('strideSub').textContent = 'Your stride is about ' + stride().toFixed(2) + ' m, used for distance.';
+    $('remind').checked = !!settings.remindOn;
+    syncSeg('remindSeg', settings.remindHour);
+    $('remindSeg').hidden = !settings.remindOn;
+    $('remindSub').textContent = settings.remindOn
+      ? 'If today’s goal isn’t reached by ' + new Date(2000, 0, 1, settings.remindHour).toLocaleTimeString(undefined, { hour: 'numeric' }) + ', you’ll get a nudge.'
+      : 'A nudge in the evening if today’s goal isn’t reached yet.';
+  }
+
   /* Android back: close settings, 3D or the onboarding step first (true = handled) */
   window.treeBack = function () {
+    if (!$('journey').hidden) { closeJourney(); return true; }
     if (!$('settings').hidden) { closeSheet(); return true; }
     if (in3D) { set3D(false); return true; }
     if (!$('onboard').hidden) { showOb(obStep + 1); return true; }

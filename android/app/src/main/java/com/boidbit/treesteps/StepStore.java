@@ -55,15 +55,20 @@ final class StepStore {
             base = base - last;                             // rebooted today: keep the steps already walked
         }
         int steps = (int) Math.max(0, raw - base);
-        p.edit().putString("day", day).putLong("base", base).putLong("last", raw).putInt("steps", steps).apply();
+        int before = day.equals(savedDay) ? p.getInt("steps", 0) : 0;
+        SharedPreferences.Editor e = p.edit().putString("day", day).putLong("base", base).putLong("last", raw).putInt("steps", steps);
+        addToHour(p, e, day, Math.max(0, steps - before));
+        e.apply();
+        TreeWidget.stepsChanged(c, steps);
         return steps;
     }
 
     private static final int HISTORY_DAYS = 60;
 
-    /** History is kept as "yyyyMMdd:steps,..." newest first. */
+    /** History is kept as "yyyyMMdd:steps:goal:design:seed,..." newest first (older entries may stop after steps). */
     private static void saveDay(SharedPreferences p, String day, int steps) {
-        StringBuilder out = new StringBuilder(day).append(':').append(steps);
+        StringBuilder out = new StringBuilder(day).append(':').append(steps).append(':').append(Math.max(1000, p.getInt("goal", 10000)))
+            .append(':').append(p.getString("design", "banyan")).append(':').append(p.getInt("seed", 48213));
         int kept = 1;
         for (String e : p.getString("history", "").split(",")) {
             if (e.isEmpty() || e.startsWith(day + ":")) continue;
@@ -73,14 +78,38 @@ final class StepStore {
         p.edit().putString("history", out.toString()).apply();
     }
 
-    /** Finished days, newest first, as {yyyyMMdd, steps}. Today is not included. */
+    /** Finished days, newest first, as {yyyyMMdd, steps, [goal, design, seed]}. Today is not included. */
     static java.util.List<String[]> history(Context c) {
         java.util.List<String[]> out = new java.util.ArrayList<>();
         for (String e : prefs(c).getString("history", "").split(",")) {
-            int i = e.indexOf(':');
-            if (i > 0) out.add(new String[] { e.substring(0, i), e.substring(i + 1) });
+            String[] f = e.split(":");
+            if (f.length >= 2) out.add(f);
         }
         return out;
+    }
+
+    /* today's steps by hour of day: steps between two readings count toward the hour of the later one */
+    private static void addToHour(SharedPreferences p, SharedPreferences.Editor e, String day, int delta) {
+        int[] h = day.equals(p.getString("hours_day", "")) ? parseHours(p.getString("hours", "")) : new int[24];
+        h[java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)] += delta;
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < 24; i++) { if (i > 0) out.append(','); out.append(h[i]); }
+        e.putString("hours", out.toString()).putString("hours_day", day);
+    }
+
+    private static int[] parseHours(String s) {
+        int[] h = new int[24];
+        String[] f = s.split(",");
+        for (int i = 0; i < 24 && i < f.length; i++) {
+            try { h[i] = Integer.parseInt(f[i]); } catch (NumberFormatException ignored) {}
+        }
+        return h;
+    }
+
+    /** Today's steps for each hour, 0 to 23. */
+    static int[] hours(Context c) {
+        SharedPreferences p = prefs(c);
+        return today().equals(p.getString("hours_day", "")) ? parseHours(p.getString("hours", "")) : new int[24];
     }
 
     static String todayKey() { return today(); }
@@ -156,4 +185,10 @@ final class StepStore {
     static boolean tilt(Context c) { return prefs(c).getBoolean("tilt", false); }
     /** time (follow the sun) | dawn | day | sunset | night */
     static String skyMode(Context c) { return prefs(c).getString("sky_mode", "time"); }
+    static boolean remindOn(Context c) { return prefs(c).getBoolean("remind_on", false); }
+    static int remindHour(Context c) { return prefs(c).getInt("remind_hour", 19); }
+    /** Steps shown on the wallpaper and widget: real steps when allowed, otherwise the preview value. */
+    static int shownSteps(Context c) {
+        return useRealSteps(c) && hasPermission(c) && hasStepSensor(c) ? lastKnown(c) : manualSteps(c);
+    }
 }

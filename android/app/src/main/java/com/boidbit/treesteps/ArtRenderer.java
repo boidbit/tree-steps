@@ -289,8 +289,8 @@ final class ArtRenderer {
         /* ---- the tree ---- */
         String key = seed + "|" + dz.tree;
         if (!key.equals(treeKey) || segs == null) { treeKey = key; makeTree(seed, dz.tree); }
-        double young = 1 + 0.9 * Math.pow(1 - t, 2);
-        double tk = k * 1.22 * young, bx0 = 545 * sx + par * 40 * k, by0 = 1815 * k;
+        double size = 0.62 + 0.38 * Math.pow(t, 0.8);                // a seedling starts small and close to the ground
+        double tk = k * 1.22 * size, bx0 = 545 * sx + par * 40 * k, by0 = 1815 * k;
         double[] trunk = lit(hex(dz.trunk)), bark = scale(trunk, 0.7);
         double sunSide = sunX > bx0 ? 1 : -1;
         double[] rim = mix(lit(mix(hex(dz.trunk), hex("#ffe2b8"), 0.55)), WARM, 0.3 * wG);
@@ -339,6 +339,9 @@ final class ArtRenderer {
             if (banyan) drawRoots(c, k, tk, geo, t, trunk, bark, hillDx, W);
             drawCanopy(c, tk, clusters, leaf, t, sunSide, dz, false);
             drawBlooms(c, k, tk, clusters, leaf, t, dz);
+            double young = clamp01(1 - t / 0.35);                         // seedling leaves fade as real branches take over
+            if (young > 0.01 && !geo.isEmpty())
+                drawSeedling(c, k, tk, geo.get(0), new double[][] { lit(hex("#4f8a3a")), lit(hex("#8cc35a")) }, young, sunSide, lit(mix(ground, hex("#5a3c24"), 0.6)));
         }
 
         /* falling petals / leaves, or snow */
@@ -499,6 +502,30 @@ final class ArtRenderer {
                 double a = -Math.PI / 2 + sunSide * (0.2 + r3.next() * 1.0) + (r3.next() - 0.5) * 0.5;
                 double dd = (0.25 + r3.next() * 0.65) * R, ll = (10 + r3.next() * 6) * s * tk, la = a + (r3.next() - 0.5) * 0.8;
                 leafShape(c, cl[0] + Math.cos(a) * dd, cl[1] + Math.sin(a) * dd - 10 * s * tk, ll, la, wide);
+            }
+        }
+    }
+
+    /* a young plant: a mound of soil at the foot and pairs of fresh green leaves (green, light) along the stem */
+    private void drawSeedling(Canvas c, double k, double tk, Limb g, double[][] green, double young, double sunSide, double[] soil) {
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(argb(soil, young));
+        rect.set((float) (g.X0 - 60 * k), (float) (g.Y0 + 4 * k - 15 * k), (float) (g.X0 + 60 * k), (float) (g.Y0 + 4 * k + 15 * k));
+        c.drawOval(rect, paint);
+        double dirA = Math.atan2(g.ey - g.Y0, g.ex - g.X0);
+        double[][] pairs = { { 0.5, 0.8 }, { 0.78, 1.0 } };
+        for (int i = 0; i < 2; i++) {
+            double u = pairs[i][0], A = (1 - u) * (1 - u), B = 2 * (1 - u) * u, C = u * u;
+            double px = A * g.X0 + B * g.qx + C * g.ex, py = A * g.Y0 + B * g.qy + C * g.ey;
+            double len = 58 * tk * pairs[i][1] * (0.55 + 0.45 * young);
+            for (int side = -1; side <= 1; side += 2) {
+                double ang = dirA + side * (1.05 - i * 0.15), cx = px + Math.cos(ang) * len * 0.95, cy = py + Math.sin(ang) * len * 0.95;
+                paint.setColor(argb(green[0], young));
+                leafShape(c, cx, cy, len, ang, 0.5);
+                if (side == sunSide) {
+                    paint.setColor(argb(green[1], young));
+                    leafShape(c, cx - Math.cos(ang) * len * 0.1, cy - Math.sin(ang) * len * 0.1 - 2 * k, len * 0.6, ang, 0.38);
+                }
             }
         }
     }
