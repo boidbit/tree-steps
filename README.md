@@ -1,15 +1,16 @@
 # Tree Steps
 
-A 3D tree that grows with the steps you walk, in the app and as a live wallpaper on your home and lock screen.
+An illustrated tree that grows with the steps you walk, in the app and as a live wallpaper on your home and lock screen. The app can also show the tree in 3D.
 
-- `Tree3D.html` — the app: the 3D tree (drag to rotate, pinch to zoom), today's steps, settings and first-run onboarding
+- `Tree3D.html` — the app: today's steps over the illustrated tree, settings, first-run onboarding, and **3D** (drag to rotate, pinch to zoom)
+- `lib/art.js` — the illustrated renderer (layered hills, seeded tree, sky by time of day); the wallpaper uses a Java port of it
 - `Seed Wallpapers.html` — the 2D seeded wallpaper generator
-- `lib/` — Three.js and OrbitControls, bundled so the app works offline
+- `lib/three.min.js`, `lib/OrbitControls.js` — Three.js for the 3D view, bundled so the app works offline
 - `store/icon-512.png` — the app icon for a store listing
 - `android/` — the Capacitor Android project, with the native parts in `app/src/main/java/com/boidbit/treesteps/`:
   - `TreeStepsPlugin` — real steps, settings and opening the live wallpaper picker, called from `Tree3D.html`
   - `StepStore` — turns the phone's step counter into "steps today" and stores the settings the wallpaper reads
-  - `TreeWallpaperService`, `TreeModel`, `TreeRenderer` — the live wallpaper (same tree as the app for a seed)
+  - `TreeWallpaperService`, `ArtRenderer` — the live wallpaper; `ArtRenderer` is a line-for-line port of `lib/art.js`, so a seed gives the same picture in both. Change them together.
   - the launcher icon is a vector (`res/drawable/ic_launcher_tree.xml` on `res/drawable-v24/ic_launcher_sky.xml`), with PNG copies in `res/mipmap-*` for older Android
 
 ## In the Android app

@@ -11,7 +11,7 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 15px/1.45 "Segoe UI", Roboto, system-ui, sans-serif; overflow: hidden; touch-action: none; }
-canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+canvas#art, canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 [hidden] { display: none !important; }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -21,6 +21,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .top b { display: block; font-size: 19px; letter-spacing: -0.01em; text-shadow: 0 1px 12px rgba(0,0,0,.5); }
 .top span { color: var(--muted); font-size: 12.5px; text-shadow: 0 1px 8px rgba(0,0,0,.6); }
 .iconbtn { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); backdrop-filter: blur(10px); }
+.topbtns { display: flex; gap: 8px; }
+.pillbtn { height: 44px; padding: 0 16px; border-radius: 22px; border: 1px solid var(--line); background: var(--surface); backdrop-filter: blur(10px); font-weight: 700; font-size: 14px; }
 .iconbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* home card */
@@ -78,16 +80,18 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 </style>
 </head>
 <body>
-<canvas id="c" aria-label="Your tree"></canvas>
+<canvas id="art" aria-label="Your tree"></canvas>
+<canvas id="c" aria-label="Your tree in 3D" hidden></canvas>
 
 <header class="top">
-  <div><b>Tree Steps</b><span>Drag to rotate · pinch to zoom</span></div>
+  <div><b>Tree Steps</b><span id="topSub"></span></div>
+  <div class="topbtns"><button class="pillbtn" id="toggle3D" type="button">3D</button>
   <button class="iconbtn" id="openSettings" type="button" aria-label="Settings">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-  </button>
+  </button></div>
 </header>
 
-<section class="home" aria-label="Today">
+<section class="home" id="home" aria-label="Today">
   <div class="count"><span class="big" id="stepsNum">0</span><span class="muted" id="goalTxt">of 10,000 steps</span></div>
   <div class="progress" aria-hidden="true"><i id="prog"></i></div>
   <p class="note" id="homeNote"></p>
@@ -142,6 +146,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="lib/capacitor.js"></script>
+<script src="lib/art.js"></script>
 <script src="lib/three.min.js"></script>
 <script src="lib/OrbitControls.js"></script>
 <script>
@@ -185,6 +190,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   };
   function curPal() { for (var i = 0; i < PALETTES.length; i++) if (PALETTES[i].name.toLowerCase() === state.pal.toLowerCase()) return PALETTES[i]; return PALETTES[0]; }
 
+  /* ---------- explore in 3D: the Three.js scene, built the first time it is opened ---------- */
+  var three = null;
+  function boot3D() {
   /* ---------- scene ---------- */
   var canvas = $('c');
   var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
@@ -402,6 +410,41 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   function rebuildAll() { applyPalette(); buildGround(); buildGrass(); buildTree(); seedParticles(); syncUI(); }
   function rebuildTree() { buildTree(); syncUI(); }
 
+  /* ---------- loop ---------- */
+  function resize() {
+    var w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize); resize();
+
+  var last = performance.now(), running = false;
+  function frame(now) {
+    if (!running) return;
+    var dt = Math.min(0.05, (now - last) / 1000); last = now;
+    var tt = now / 1000;
+    var pp = petalGeo.attributes.position.array, i;
+    for (i = 0; i < PETAL_MAX; i++) {
+      pp[i * 3 + 1] -= petalVel[i] * dt; pp[i * 3] += Math.sin(tt * 0.9 + i) * 0.004; pp[i * 3 + 2] += Math.cos(tt * 0.7 + i * 1.7) * 0.004;
+      if (pp[i * 3 + 1] < 0.05) pp[i * 3 + 1] = treeTop * (0.5 + hash(state.seed, 40000 + i + Math.floor(tt)) * 0.5);
+    }
+    petalGeo.attributes.position.needsUpdate = true;
+    var fp = flyGeo.attributes.position.array;
+    for (i = 0; i < FLY_MAX; i++) {
+      var fb = flyBase[i]; fp[i * 3] = fb[0] + Math.sin(tt * 0.6 + fb[3]) * 0.5; fp[i * 3 + 1] = fb[1] + Math.sin(tt * 0.8 + fb[3] * 2) * 0.4; fp[i * 3 + 2] = fb[2] + Math.cos(tt * 0.5 + fb[3]) * 0.5;
+    }
+    flyGeo.attributes.position.needsUpdate = true; flyMat.opacity = 0.65 + Math.sin(tt * 2.2) * 0.3;
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+
+  function show3D() { canvas.hidden = false; resize(); if (!running) { running = true; last = performance.now(); requestAnimationFrame(frame); } }
+  function hide3D() { running = false; canvas.hidden = true; }
+
+  rebuildAll();
+  return { rebuildAll: rebuildAll, rebuildTree: rebuildTree, show: show3D, hide: hide3D };
+  }
+
   /* ---------- settings: stored natively so the wallpaper reads them; in a browser, kept in localStorage ---------- */
   var TS = (window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform() && Capacitor.registerPlugin)
     ? Capacitor.registerPlugin('TreeSteps') : null;
@@ -441,9 +484,38 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   function applyToScene() {
     state.seed = settings.seed; state.pal = settings.pal; state.goal = settings.goal;
     if (!walking) state.steps = shownSteps();
-    if (shownSeed !== state.seed || shownPal !== state.pal) { shownSeed = state.seed; shownPal = state.pal; rebuildAll(); }
-    else rebuildTree();
+    var shapeChanged = shownSeed !== state.seed || shownPal !== state.pal;
+    shownSeed = state.seed; shownPal = state.pal;
+    refreshScene(shapeChanged);
   }
+  /* redraws the illustrated view, and the 3D view if it has been opened */
+  function refreshScene(shapeChanged) {
+    drawArt();
+    if (three) { if (shapeChanged) three.rebuildAll(); else three.rebuildTree(); }
+    syncUI();
+  }
+
+  /* ---------- illustrated home view (lib/art.js draws the same picture as the wallpaper) ---------- */
+  var art = $('art'), artCtx = art.getContext('2d');
+  function sceneHour() { if (settings.skyMode === 'sunset') return 18.3; var d = new Date(); return d.getHours() + d.getMinutes() / 60; }
+  function drawArt() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2), w = Math.round(window.innerWidth * dpr), h = Math.round(window.innerHeight * dpr);
+    if (art.width !== w || art.height !== h) { art.width = w; art.height = h; }
+    TreeArt.draw(artCtx, w, h, { seed: state.seed, pal: state.pal, t: state.steps / Math.max(1, state.goal), hour: sceneHour(), parX: 0, lift: 0.1, label: null });
+  }
+  window.addEventListener('resize', drawArt);
+  setInterval(drawArt, 60000);
+
+  var in3D = false;
+  function set3D(on) {
+    in3D = on;
+    if (on && !three) three = boot3D();
+    if (three) { if (on) three.show(); else three.hide(); }
+    art.hidden = on; $('home').hidden = on; $('openSettings').hidden = on;
+    $('toggle3D').textContent = on ? 'Close 3D' : '3D';
+    $('topSub').textContent = on ? 'Drag to rotate · pinch to zoom' : '';
+  }
+  $('toggle3D').addEventListener('click', function () { set3D(!in3D); });
 
   /* ---------- home ---------- */
   function syncUI() {
@@ -567,7 +639,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     walking = true;
     (function frame(now) {
       var u = Math.min(1, (now - t0) / DUR);
-      state.steps = Math.round(u * g / 100) * 100; rebuildTree();
+      state.steps = Math.round(u * g / 100) * 100; refreshScene(false);
       if (u < 1) walkRaf = requestAnimationFrame(frame);
       else { walking = false; applyToScene(); }
     })(t0);
@@ -596,7 +668,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   $('obSkip').addEventListener('click', function () { showOb(obStep === 0 ? OB.length : obStep + 1); });
 
   /* ---------- start ---------- */
-  syncUI();
+  drawArt(); syncUI();
   loadSettings().then(function () {
     applyToScene(); syncSettings();
     if (TS) {
@@ -609,38 +681,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     }
   });
 
-  /* ---------- loop ---------- */
-  function resize() {
-    var w = window.innerWidth, h = window.innerHeight;
-    renderer.setSize(w, h, false); camera.aspect = w / h;
-    camera.setViewOffset(w, h, 0, h * 0.13, w, h);   // lift the tree above the home card
-    camera.updateProjectionMatrix();
-  }
-  window.addEventListener('resize', resize); resize();
-
-  var last = performance.now();
-  function frame(now) {
-    var dt = Math.min(0.05, (now - last) / 1000); last = now;
-    var tt = now / 1000;
-    var pp = petalGeo.attributes.position.array, i;
-    for (i = 0; i < PETAL_MAX; i++) {
-      pp[i * 3 + 1] -= petalVel[i] * dt; pp[i * 3] += Math.sin(tt * 0.9 + i) * 0.004; pp[i * 3 + 2] += Math.cos(tt * 0.7 + i * 1.7) * 0.004;
-      if (pp[i * 3 + 1] < 0.05) pp[i * 3 + 1] = treeTop * (0.5 + hash(state.seed, 40000 + i + Math.floor(tt)) * 0.5);
-    }
-    petalGeo.attributes.position.needsUpdate = true;
-    var fp = flyGeo.attributes.position.array;
-    for (i = 0; i < FLY_MAX; i++) {
-      var fb = flyBase[i]; fp[i * 3] = fb[0] + Math.sin(tt * 0.6 + fb[3]) * 0.5; fp[i * 3 + 1] = fb[1] + Math.sin(tt * 0.8 + fb[3] * 2) * 0.4; fp[i * 3 + 2] = fb[2] + Math.cos(tt * 0.5 + fb[3]) * 0.5;
-    }
-    flyGeo.attributes.position.needsUpdate = true; flyMat.opacity = 0.65 + Math.sin(tt * 2.2) * 0.3;
-    controls.update();
-    renderer.render(scene, camera);
-    requestAnimationFrame(frame);
-  }
-
-  rebuildAll();
-  requestAnimationFrame(frame);
-  window.__t3 = { state: state, settings: settings, rebuildAll: rebuildAll, rebuildTree: rebuildTree, camera: camera, counts: function () { return { bark: bark.count, leaves: leaves.count, blooms: blooms.count }; } };
+  window.__t3 = { state: state, settings: settings };
 })();
 </script>
 </body>
