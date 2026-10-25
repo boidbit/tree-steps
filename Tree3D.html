@@ -51,9 +51,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg button { flex: 1 1 auto; min-width: 56px; padding: 9px 10px; border-radius: 11px; border: 1px solid var(--line); background: var(--raised); color: var(--muted); font-weight: 600; font-size: 14px; }
 .seg button[aria-pressed=true] { border-color: var(--accent); color: var(--fg); background: rgba(255,138,92,0.14); }
-.swatches button { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; }
-.swatches i { display: flex; width: 54px; height: 22px; border-radius: 6px; overflow: hidden; }
-.swatches i b { flex: 1; }
+.designs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.designs button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px; min-width: 0; }
+.designs canvas { width: 100%; aspect-ratio: 9 / 18; border-radius: 9px; display: block; }
 .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .switch input { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 48px; height: 28px; margin: 0; border-radius: 14px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); transition: background .15s; }
 .switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
@@ -125,7 +125,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   </div></div>
 
   <div class="group"><h2>Tree</h2><div class="box">
-    <div class="item"><span class="lab">Colours</span><div class="seg swatches" id="palSeg"></div></div>
+    <div class="item"><span class="lab">Design</span><span class="sub">Trees from around the world. The wallpaper uses the same design.</span><div class="seg designs" id="designSeg"></div></div>
     <div class="item"><div class="row2"><button id="newTree" type="button">New tree</button><button id="previewGrow" type="button">Preview growth</button></div>
       <span class="sub">A new tree has a different shape. Preview shows it growing from 0 to your goal.</span></div>
   </div></div>
@@ -448,11 +448,12 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   /* ---------- settings: stored natively so the wallpaper reads them; in a browser, kept in localStorage ---------- */
   var TS = (window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform() && Capacitor.registerPlugin)
     ? Capacitor.registerPlugin('TreeSteps') : null;
-  var DEFAULTS = { seed: 48213, pal: 'Sunset', manualSteps: 6000, useReal: false, goal: 10000, labelStyle: 'goal',
+  var DEFAULTS = { seed: 48213, design: 'oak', manualSteps: 6000, useReal: false, goal: 10000, labelStyle: 'goal',
     labelPos: 'tree', labelSize: 'm', intervalMin: 15, tilt: false, skyMode: 'time' };
   var settings = {}, k;
   for (k in DEFAULTS) settings[k] = DEFAULTS[k];
-  var realSteps = 0, hasSensor = true, walking = false, wallActive = false, shownSeed = null, shownPal = null;
+  var realSteps = 0, hasSensor = true, walking = false, wallActive = false, shownSeed = null, shownDesign = null;
+  var PAL_FOR_DESIGN = { oak: 'Forest', sakura: 'Sunset', maple: 'Ember', pine: 'Ocean', jacaranda: 'Orchid', banyan: 'Forest' };
   var fmt = function (n) { return Number(n).toLocaleString(); };
 
   var saveTimer = 0, pending = {};
@@ -474,7 +475,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     }
     try { var o = JSON.parse(localStorage.getItem('ts.settings') || '{}'); for (var key2 in DEFAULTS) if (o[key2] !== undefined) settings[key2] = o[key2]; } catch (e) {}
     if (q.has('seed')) settings.seed = state.seed;
-    if (q.has('pal')) settings.pal = state.pal;
+    if (q.has('design')) settings.design = q.get('design');
     if (q.has('steps')) settings.manualSteps = state.steps;
     return Promise.resolve();
   }
@@ -482,10 +483,10 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
   /* pushes settings into the 3D scene, rebuilding only what changed */
   function applyToScene() {
-    state.seed = settings.seed; state.pal = settings.pal; state.goal = settings.goal;
+    state.seed = settings.seed; state.pal = PAL_FOR_DESIGN[settings.design] || 'Forest'; state.goal = settings.goal;
     if (!walking) state.steps = shownSteps();
-    var shapeChanged = shownSeed !== state.seed || shownPal !== state.pal;
-    shownSeed = state.seed; shownPal = state.pal;
+    var shapeChanged = shownSeed !== state.seed || shownDesign !== settings.design;
+    shownSeed = state.seed; shownDesign = settings.design;
     refreshScene(shapeChanged);
   }
   /* redraws the illustrated view, and the 3D view if it has been opened */
@@ -497,11 +498,10 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
   /* ---------- illustrated home view (lib/art.js draws the same picture as the wallpaper) ---------- */
   var art = $('art'), artCtx = art.getContext('2d');
-  function sceneHour() { if (settings.skyMode === 'sunset') return 18.3; var d = new Date(); return d.getHours() + d.getMinutes() / 60; }
   function drawArt() {
     var dpr = Math.min(window.devicePixelRatio || 1, 2), w = Math.round(window.innerWidth * dpr), h = Math.round(window.innerHeight * dpr);
     if (art.width !== w || art.height !== h) { art.width = w; art.height = h; }
-    TreeArt.draw(artCtx, w, h, { seed: state.seed, pal: state.pal, t: state.steps / Math.max(1, state.goal), hour: sceneHour(), parX: 0, lift: 0.1, label: null });
+    TreeArt.draw(artCtx, w, h, { seed: state.seed, design: settings.design, t: state.steps / Math.max(1, state.goal), now: Date.now(), sunset: settings.skyMode === 'sunset', parX: 0, lift: 0.1, label: null });
   }
   window.addEventListener('resize', drawArt);
   setInterval(drawArt, 60000);
@@ -585,20 +585,27 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   }
   seg('goalSeg', [[5000, '5k'], [8000, '8k'], [10000, '10k'], [12000, '12k'], [15000, '15k']], 'goal', applyToScene);
   seg('intervalSeg', [[0, 'Live'], [5, '5 min'], [15, '15 min'], [30, '30 min'], [60, '1 hour']], 'intervalMin');
-  seg('skySeg', [['time', 'Follows the time'], ['sunset', 'Always sunset']], 'skyMode');
+  seg('skySeg', [['time', 'Follows the sun'], ['sunset', 'Always sunset']], 'skyMode', function () { applyToScene(); drawThumbs(); });
   seg('styleSeg', [['off', 'Off'], ['steps', 'Steps'], ['goal', 'Steps / goal'], ['bar', 'Bar'], ['percent', '%']], 'labelStyle');
   seg('posSeg', [['tree', 'Under the tree'], ['bottom', 'Bottom']], 'labelPos');
   seg('sizeSeg', [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']], 'labelSize');
-  seg('palSeg', PALETTES.map(function (p) {
-    var sw = document.createElement('i');
-    p.c.forEach(function (c) { var b = document.createElement('b'); b.style.background = 'rgb(' + c.join(',') + ')'; sw.appendChild(b); });
-    return [p.name, p.name, sw];
-  }), 'pal', applyToScene);
+  var thumbs = {};
+  seg('designSeg', TreeArt.order.map(function (id) {
+    var cv = document.createElement('canvas'); cv.width = 180; cv.height = 360; thumbs[id] = cv;
+    return [id, TreeArt.designs[id].name, cv];
+  }), 'design', applyToScene);
+  /* thumbnails show each design with your tree, nearly grown, in the current light */
+  function drawThumbs() {
+    TreeArt.order.forEach(function (id) {
+      var cv = thumbs[id];
+      TreeArt.draw(cv.getContext('2d'), cv.width, cv.height, { seed: settings.seed, design: id, t: 0.85, now: Date.now(), sunset: settings.skyMode === 'sunset', parX: 0, lift: 0, label: null });
+    });
+  }
 
   function syncSettings() {
     syncSeg('goalSeg', settings.goal); syncSeg('intervalSeg', settings.intervalMin); syncSeg('skySeg', settings.skyMode);
     syncSeg('styleSeg', settings.labelStyle); syncSeg('posSeg', settings.labelPos); syncSeg('sizeSeg', settings.labelSize);
-    syncSeg('palSeg', settings.pal);
+    syncSeg('designSeg', settings.design);
     $('useReal').checked = !!settings.useReal;
     $('useReal').disabled = !hasSensor;
     $('useRealSub').textContent = hasSensor ? 'Uses the phone\'s step counter. Your steps never leave the phone.' : 'This phone has no step counter.';
@@ -622,11 +629,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     $('previewVal').textContent = fmt(settings.manualSteps);
     applyToScene();
   });
-  $('newTree').addEventListener('click', function () { store({ seed: 1000 + Math.floor(Math.random() * 998999) }); applyToScene(); toast('New tree planted'); });
+  $('newTree').addEventListener('click', function () { store({ seed: 1000 + Math.floor(Math.random() * 998999) }); applyToScene(); drawThumbs(); toast('New tree planted'); });
   $('wallBtn2').addEventListener('click', openWallpaper);
   $('wallBtn2').parentNode.hidden = !TS;
 
-  function openSheet() { syncSettings(); $('settings').hidden = false; }
+  function openSheet() { syncSettings(); drawThumbs(); $('settings').hidden = false; }
   function closeSheet() { $('settings').hidden = true; applyToScene(); checkWallpaper(); }
   $('openSettings').addEventListener('click', openSheet);
   $('closeSettings').addEventListener('click', closeSheet);

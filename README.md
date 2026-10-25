@@ -3,7 +3,7 @@
 An illustrated tree that grows with the steps you walk, in the app and as a live wallpaper on your home and lock screen. The app can also show the tree in 3D.
 
 - `Tree3D.html` — the app: today's steps over the illustrated tree, settings, first-run onboarding, and **3D** (drag to rotate, pinch to zoom)
-- `lib/art.js` — the illustrated renderer (layered hills, seeded tree, sky by time of day); the wallpaper uses a Java port of it
+- `lib/art.js` — the illustrated renderer: six designs (scene × tree kind × colours), a seeded tree that grows with steps, the sun at its real position for the phone's time zone and the moon's phase at night; the wallpaper uses a Java port of it
 - `Seed Wallpapers.html` — the 2D seeded wallpaper generator
 - `lib/three.min.js`, `lib/OrbitControls.js` — Three.js for the 3D view, bundled so the app works offline
 - `store/icon-512.png` — the app icon for a store listing
@@ -20,11 +20,13 @@ The first launch walks through three screens: what the app does, allowing step c
 | Section | Settings |
 |---|---|
 | Steps | Count my real steps · Daily goal (5k–15k; the tree is fully grown at the goal) · Preview steps (when real steps are off) |
-| Wallpaper | Update the tree: **Live** (grows as you walk while the wallpaper is on screen) or every 5 / 15 / 30 / 60 minutes (checks steps when you unlock, then on that interval) · Tilt to look around · Sky: follows the time or always sunset |
+| Wallpaper | Update the tree: **Live** (grows as you walk while the wallpaper is on screen) or every 5 / 15 / 30 / 60 minutes (checks steps when you unlock, then on that interval) · Tilt to look around (parallax) · Sky: follows the sun or always sunset |
 | Step counter on the wallpaper | Style: off, steps, steps / goal, progress bar, percent · Position: under the tree or bottom · Size |
-| Tree | Colours · New tree (a different shape) · Preview growth |
+| Tree | Design: Oak (hills), Sakura (lake), Maple (autumn), Pine (snow), Jacaranda (fields), Banyan (aerial roots) · New tree (a different shape) · Preview growth |
 
 The wallpaper never runs while it is hidden. In interval mode it reads the step counter once when it becomes visible and then every N minutes; tilt uses the accelerometer only when switched on.
+
+The sun is placed from the phone's time zone (no location permission): each zone in `lib/art.js` / `ArtRenderer.java` maps to a representative city, and unknown zones fall back to a longitude from the UTC offset.
 
 Steps count from the first time you turn them on; Android's step counter cannot report steps from before that.
 

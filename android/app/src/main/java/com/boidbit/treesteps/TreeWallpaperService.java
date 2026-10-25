@@ -12,7 +12,6 @@ import android.os.Looper;
 import android.service.wallpaper.WallpaperService;
 import android.view.SurfaceHolder;
 
-import java.util.Calendar;
 
 /**
  * Live wallpaper: the illustrated tree (ArtRenderer) grows with today's steps. Two update modes
@@ -47,7 +46,7 @@ public class TreeWallpaperService extends WallpaperService {
         private Sensor accel, stepCounter;
 
         private int seed, goal, steps, intervalMin;
-        private String pal, skyMode, labelStyle, labelPos, labelSize;
+        private String design, skyMode, labelStyle, labelPos, labelSize;
         private boolean realSteps, tiltOn;
         private boolean visible, sensorsOn;
         private int width, height;
@@ -123,7 +122,7 @@ public class TreeWallpaperService extends WallpaperService {
         private void loadSettings() {
             Context c = TreeWallpaperService.this;
             seed = StepStore.seed(c);
-            pal = StepStore.palette(c);
+            design = StepStore.design(c);
             goal = StepStore.goal(c);
             realSteps = StepStore.useRealSteps(c) && StepStore.hasPermission(c) && stepCounter != null;
             intervalMin = StepStore.prefs(c).getInt("interval_min", 15);
@@ -202,16 +201,10 @@ public class TreeWallpaperService extends WallpaperService {
             try {
                 c = Build.VERSION.SDK_INT >= 26 ? holder.lockHardwareCanvas() : holder.lockCanvas();
                 if (c != null) {
-                    double hour;
-                    if ("sunset".equals(skyMode)) {
-                        hour = 18.3;
-                    } else {
-                        Calendar now = Calendar.getInstance();
-                        hour = now.get(Calendar.HOUR_OF_DAY) + now.get(Calendar.MINUTE) / 60.0;
-                    }
                     ArtRenderer.Label label = realSteps && !"off".equals(labelStyle)
                         ? new ArtRenderer.Label(labelStyle, labelPos, labelSize, steps, goal) : null;
-                    renderer.draw(c, width, height, seed, pal, steps / (double) Math.max(1, goal), hour, par, label);
+                    renderer.draw(c, width, height, seed, design, steps / (double) Math.max(1, goal), System.currentTimeMillis(),
+                        "sunset".equals(skyMode), par, label);
                 }
             } catch (RuntimeException ignored) {
                 // surface went away mid-frame; the next visibility change redraws

@@ -88,6 +88,7 @@ public class TreeStepsPlugin extends Plugin {
         JSObject r = new JSObject();
         r.put("seed", StepStore.seed(c));
         r.put("pal", StepStore.palette(c));
+        r.put("design", StepStore.design(c));
         r.put("manualSteps", StepStore.manualSteps(c));
         r.put("useReal", StepStore.useRealSteps(c) && hasStepAccess());
         r.put("goal", StepStore.goal(c));
@@ -110,6 +111,7 @@ public class TreeStepsPlugin extends Plugin {
         putInt(e, call, "goal", "goal");
         putInt(e, call, "intervalMin", "interval_min");
         putString(e, call, "pal", "pal");
+        putString(e, call, "design", "design");
         putString(e, call, "labelStyle", "label_style");
         putString(e, call, "labelPos", "label_pos");
         putString(e, call, "labelSize", "label_size");

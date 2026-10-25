@@ -114,6 +114,8 @@ final class StepStore {
 
     static int seed(Context c) { return prefs(c).getInt("seed", 48213); }
     static String palette(Context c) { return prefs(c).getString("pal", "Sunset"); }
+    /** oak | sakura | maple | pine | jacaranda | banyan (see ArtRenderer) */
+    static String design(Context c) { return prefs(c).getString("design", "oak"); }
     static boolean useRealSteps(Context c) { return prefs(c).getBoolean("use_real", false); }
     static int manualSteps(Context c) { return prefs(c).getInt("manual_steps", 6000); }
     static int goal(Context c) { return Math.max(1000, prefs(c).getInt("goal", 10000)); }
