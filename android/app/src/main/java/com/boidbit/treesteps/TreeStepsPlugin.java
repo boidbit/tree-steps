@@ -12,6 +12,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.util.Base64;
 
+import androidx.activity.result.ActivityResult;
 import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSArray;
@@ -20,6 +21,7 @@ import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
@@ -27,7 +29,7 @@ import com.getcapacitor.annotation.PermissionCallback;
 import java.io.File;
 import java.io.FileOutputStream;
 
-/** Bridge for Tree3D.html: real steps and history, settings, reminders, sharing, and the live wallpaper picker. */
+/** Bridge for Tree3D.html: real steps and history, Health Connect, settings, reminders, sharing, widgets and the live wallpaper picker. */
 @CapacitorPlugin(
     name = "TreeSteps",
     permissions = {
@@ -36,6 +38,11 @@ import java.io.FileOutputStream;
     }
 )
 public class TreeStepsPlugin extends Plugin {
+
+    @Override
+    public void load() {
+        VehicleWatch.register(getContext());
+    }
 
     private boolean hasStepAccess() {
         return Build.VERSION.SDK_INT < 29 || getPermissionState("activity") == PermissionState.GRANTED;
@@ -65,7 +72,10 @@ public class TreeStepsPlugin extends Plugin {
 
     private void stepsDecided(PluginCall call) {
         boolean ok = hasStepAccess();
-        StepStore.prefs(getContext()).edit().putBoolean("use_real", ok).apply();
+        SharedPreferences.Editor e = StepStore.prefs(getContext()).edit().putBoolean("use_real", ok);
+        if (ok) e.putLong("last_move", System.currentTimeMillis());     // the tree starts out fresh, not thirsty
+        e.apply();
+        VehicleWatch.register(getContext());
         JSObject r = new JSObject();
         r.put("granted", ok);
         if (!ok) r.put("reason", "permission");
@@ -76,18 +86,32 @@ public class TreeStepsPlugin extends Plugin {
     @PluginMethod
     public void getSteps(PluginCall call) {
         Context ctx = getContext();
-        if (!StepStore.hasStepSensor(ctx) || !hasStepAccess() || !StepStore.useRealSteps(ctx)) {
+        boolean health = StepStore.healthSource(ctx);
+        if ((!StepStore.hasStepSensor(ctx) && !health) || !hasStepAccess() || !StepStore.useRealSteps(ctx)) {
             JSObject r = new JSObject();
             r.put("available", false);
-            r.put("reason", !StepStore.hasStepSensor(ctx) ? "nosensor" : !hasStepAccess() ? "permission" : "off");
+            r.put("reason", !hasStepAccess() ? "permission" : !StepStore.useRealSteps(ctx) ? "off" : "nosensor");
             call.resolve(r);
             return;
         }
+        if (health) HealthSteps.today(ctx, n -> {
+            if (n >= 0) StepStore.recordHealth(ctx, n);
+            readSteps(call, n >= 0);
+        });
+        else readSteps(call, false);
+    }
+
+    /* the step counter once, then today's steps with how thirsty the tree is and the goal streak */
+    private void readSteps(PluginCall call, boolean fromHealth) {
+        Context ctx = getContext();
         StepStore.readOnce(ctx, (steps, fresh) -> {
             JSObject r = new JSObject();
             r.put("available", true);
             r.put("steps", steps);
-            r.put("fresh", fresh);
+            r.put("fresh", fresh || fromHealth);
+            r.put("wilt", StepStore.wilt(ctx, System.currentTimeMillis()));
+            r.put("streak", StepStore.streak(ctx));
+            r.put("inVehicle", StepStore.inVehicle(ctx));
             call.resolve(r);
         });
     }
@@ -114,12 +138,24 @@ public class TreeStepsPlugin extends Plugin {
         r.put("heightCm", StepStore.prefs(c).getInt("height_cm", 170));
         r.put("weightKg", StepStore.prefs(c).getInt("weight_kg", 70));
         r.put("hasSensor", StepStore.hasStepSensor(c));
+        r.put("ignoreVehicle", StepStore.ignoreVehicles(c));
+        r.put("stepSource", StepStore.healthSource(c) ? "health" : "phone");
+        r.put("healthStatus", HealthSteps.status(c));
         call.resolve(r);
     }
 
     /** Finished days (newest first) plus today's key, for the week chart and the streak. */
     @PluginMethod
     public void getHistory(PluginCall call) {
+        Context c = getContext();
+        if (StepStore.healthSource(c)) HealthSteps.days(c, 60, d -> {
+            StepStore.mergeHistory(c, d);
+            sendHistory(call);
+        });
+        else sendHistory(call);
+    }
+
+    private void sendHistory(PluginCall call) {
         JSArray days = new JSArray();
         Context c = getContext();
         for (String[] d : StepStore.history(c)) {
@@ -164,7 +200,10 @@ public class TreeStepsPlugin extends Plugin {
         putInt(e, call, "remindHour", "remind_hour");
         putInt(e, call, "heightCm", "height_cm");
         putInt(e, call, "weightKg", "weight_kg");
+        putBool(e, call, "ignoreVehicle", "ignore_vehicle");
+        if ("phone".equals(call.getString("stepSource"))) e.putString("step_source", "phone");   // "health" only through connectHealth
         e.apply();
+        VehicleWatch.register(getContext());
         Reminders.schedule(getContext());
         TreeWidget.updateAll(getContext());
         call.resolve();
@@ -233,12 +272,67 @@ public class TreeStepsPlugin extends Plugin {
         }
     }
 
-    /** Whether Tree Steps is the current live wallpaper. */
+    /**
+     * Makes Health Connect (Samsung Health, Google Fit, ...) the step source: installs or updates it from the
+     * Play Store if needed, asks to read steps, then fills the history from it.
+     */
+    @PluginMethod
+    public void connectHealth(PluginCall call) {
+        Context c = getContext();
+        String status = HealthSteps.status(c);
+        if (!"available".equals(status)) {
+            if ("update".equals(status)) {
+                try { getActivity().startActivity(HealthSteps.storeIntent()); } catch (ActivityNotFoundException ignored) {}
+            }
+            healthDone(call, false, status);
+            return;
+        }
+        HealthSteps.granted(c, ok -> {
+            if (ok) healthDone(call, true, null);
+            else startActivityForResult(call, HealthSteps.permissionIntent(c), "healthPermissionResult");
+        });
+    }
+
+    @ActivityCallback
+    private void healthPermissionResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        HealthSteps.granted(getContext(), ok -> healthDone(call, ok, ok ? null : "permission"));
+    }
+
+    private void healthDone(PluginCall call, boolean ok, String reason) {
+        Context c = getContext();
+        JSObject r = new JSObject();
+        r.put("connected", ok);
+        if (reason != null) r.put("reason", reason);
+        if (!ok) { call.resolve(r); return; }
+        StepStore.prefs(c).edit().putString("step_source", "health").putBoolean("use_real", true).apply();
+        HealthSteps.days(c, 60, d -> {
+            StepStore.mergeHistory(c, d);
+            HealthSteps.today(c, n -> {
+                if (n >= 0) StepStore.recordHealth(c, n);
+                TreeWidget.updateAll(c);
+                call.resolve(r);
+            });
+        });
+    }
+
+    /** Asks the launcher to add a widget: size s (2×2), m (4×2) or l (4×4). */
+    @PluginMethod
+    public void pinWidget(PluginCall call) {
+        String size = call.getString("size", "s");
+        boolean ok = TreeWidget.pin(getContext(), "l".equals(size) ? TreeWidget.LARGE : "m".equals(size) ? TreeWidget.MEDIUM : TreeWidget.SMALL);
+        JSObject r = new JSObject();
+        r.put("supported", ok);
+        call.resolve(r);
+    }
+
+    /** Whether Tree Steps is the current live wallpaper, and how many of its widgets are on the home screen. */
     @PluginMethod
     public void wallpaperStatus(PluginCall call) {
         WallpaperInfo info = WallpaperManager.getInstance(getContext()).getWallpaperInfo();
         JSObject r = new JSObject();
         r.put("active", info != null && info.getComponent().equals(new ComponentName(getContext(), TreeWallpaperService.class)));
+        r.put("widgets", TreeWidget.placed(getContext()));
         call.resolve(r);
     }
 

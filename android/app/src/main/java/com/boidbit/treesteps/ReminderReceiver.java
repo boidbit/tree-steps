@@ -4,7 +4,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 
-/** Fires the daily reminder, and sets the alarm again after a reboot or an app update (both clear alarms). */
+/**
+ * Fires the daily reminder. After a reboot or an app update (both clear alarms and activity updates) it sets
+ * the alarm again and restarts vehicle detection.
+ */
 public class ReminderReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -17,6 +20,8 @@ public class ReminderReceiver extends BroadcastReceiver {
             });
         } else {
             Reminders.schedule(c);
+            StepStore.setInVehicle(c, false);
+            VehicleWatch.register(c);
         }
     }
 }

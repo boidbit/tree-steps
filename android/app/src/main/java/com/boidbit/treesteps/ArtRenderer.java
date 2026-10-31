@@ -4,6 +4,8 @@ import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -114,6 +116,14 @@ final class ArtRenderer {
      * @param skyStyle "time" to follow the real sun, or a fixed "dawn" | "day" | "sunset" | "night"
      */
     void draw(Canvas c, int W, int H, int seed, String designId, double growth, long nowMs, String skyStyle, double par, Label label) {
+        draw(c, W, H, seed, designId, growth, nowMs, skyStyle, par, label, 0, 0);
+    }
+
+    /**
+     * @param streak goal days in a row: brings butterflies, birds, a nest, a squirrel, a rabbit, a peacock
+     * @param wilt   0..1 after hours without walking: the leaves yellow and droop
+     */
+    void draw(Canvas c, int W, int H, int seed, String designId, double growth, long nowMs, String skyStyle, double par, Label label, int streak, double wilt) {
         Design dz = DESIGNS.get(designId);
         if (dz == null) dz = DESIGNS.get("banyan");
         String[] sc = SCENES.get(dz.scene);
@@ -296,7 +306,10 @@ final class ArtRenderer {
         double[] rim = mix(lit(mix(hex(dz.trunk), hex("#ffe2b8"), 0.55)), WARM, 0.3 * wG);
         double[][] leaf = new double[3][];
         for (int j = 0; j < 3; j++) leaf[j] = lit(hex(dz.leaf[j]));
-        if (dz.tree.equals("pine")) drawPine(c, tk, bx0, by0, t, trunk, leaf, dz.scene.equals("snow"), sunSide, seed);
+        wilt = clamp01(wilt);
+        if (wilt > 0) for (int j = 0; j < 3; j++) leaf[j] = mix(leaf[j], lit(hex("#a8984e")), 0.45 * wilt);   // a thirsty tree yellows and droops
+        Spots spots = null;
+        if (dz.tree.equals("pine")) spots = drawPine(c, tk, bx0, by0, t, trunk, leaf, dz.scene.equals("snow"), sunSide, seed);
         else {
             int L = levels;
             double P = 0.9 + t * (L + 0.25), thin = 0.5 + 0.5 * Math.min(1, t * 1.5);
@@ -323,6 +336,8 @@ final class ArtRenderer {
                 boolean frontier = s.d == L || P - (s.d + 1) < 0.35;
                 if ((s.d >= Math.max(2, Math.floor(P) - 2) || frontier) && gg > 0.15) clusters.add(new double[] { g.ex, g.ey, si, gg });
             }
+            if (wilt > 0) for (double[] cl : clusters) cl[1] += 16 * wilt * tk * cl[3];
+            spots = critterSpots(geo, clusters, bx0, seed);
             // soft shadow on the ground under the crown
             double shR = (120 + 260 * t) * tk;
             c.save();
@@ -344,11 +359,13 @@ final class ArtRenderer {
                 drawSeedling(c, k, tk, geo.get(0), new double[][] { lit(hex("#4f8a3a")), lit(hex("#8cc35a")) }, young, sunSide, lit(mix(ground, hex("#5a3c24"), 0.6)));
         }
 
+        if (streak > 0 && spots != null) drawCritters(c, k, spots, seed, streak, light < 0.6, t, sunSide, bx0, sx, hillDx, W, dz.scene.equals("snow"));
+
         /* falling petals / leaves, or snow */
         double[] fall = lit(hex(dz.fall));
         Rng rp = new Rng(6);
         boolean snowing = dz.tree.equals("pine");
-        long np = snowing ? 70 : Math.round(26 * clamp01((t - 0.4) / 0.6));
+        long np = snowing ? 70 : Math.round(26 * clamp01((t - 0.4) / 0.6) + 14 * wilt);
         for (int i = 0; i < np; i++) {
             double px = snowing ? rp.next() * W : (330 + rp.next() * 480) * sx + par * 40 * k;
             double py = (snowing ? 300 + rp.next() * 1700 : 1300 + rp.next() * 560) * k, rot = rp.next() * 3, pa = 0.5 + rp.next() * 0.4;
@@ -580,8 +597,226 @@ final class ArtRenderer {
         }
     }
 
+    /* ---------- the living tree: creatures arrive as the goal streak grows ---------- */
+
+    /** Where creatures can sit: two perches {x, y, dir}, a nest, a trunk spot {x, y, half width}, the crown centre. */
+    private static final class Spots {
+        double[] bird1, bird2, nest, trunk, crown;
+    }
+
+    private static Spots critterSpots(ArrayList<Limb> geo, ArrayList<double[]> clusters, double bx0, int seed) {
+        Rng r = new Rng(seed * 13 + 1);
+        ArrayList<double[]> perch = new ArrayList<>();
+        for (Limb g : geo) if ((g.s.d == 2 || g.s.d == 3) && g.gg >= 1) perch.add(new double[] { g.ex, g.ey, g.ex >= bx0 ? 1 : -1, Math.abs(g.ex - bx0) });
+        perch.sort((a, b) -> Double.compare(b[3], a[3]));              // outer branches first, where birds are easy to see
+        Spots sp = new Spots();
+        if (!perch.isEmpty()) sp.bird1 = perch.get((int) Math.floor(r.next() * Math.min(3, perch.size())));
+        if (sp.bird1 != null) for (double[] p : perch) if (p[2] != sp.bird1[2]) { sp.bird2 = p; break; }
+        ArrayList<double[]> low = new ArrayList<>(clusters);
+        low.sort((a, b) -> Double.compare(b[1], a[1]));
+        if (low.size() > 3) { double[] n = low.get(1 + (int) Math.floor(r.next() * 3)); sp.nest = new double[] { n[0], n[1] }; }
+        if (!geo.isEmpty()) {
+            Limb tr = geo.get(0);
+            double u = 0.55, A = (1 - u) * (1 - u), B = 2 * (1 - u) * u, C = u * u;
+            sp.trunk = new double[] { A * tr.X0 + B * tr.qx + C * tr.ex, A * tr.Y0 + B * tr.qy + C * tr.ey, tr.a };
+        }
+        if (!clusters.isEmpty()) {
+            double cx = 0, cy = 0;
+            for (double[] cl : clusters) { cx += cl[0]; cy += cl[1]; }
+            sp.crown = new double[] { cx / clusters.size(), cy / clusters.size() };
+        }
+        return sp;
+    }
+
+    private void drawCritters(Canvas c, double k, Spots sp, int seed, int streak, boolean night, double t, double sunSide,
+                              double bx0, double sx, double hillDx, int W, boolean snow) {
+        double s = k * 2.1;
+        Rng rc = new Rng(seed * 17 + 5);
+        paint.setStyle(Paint.Style.FILL);
+        if (streak >= 1 && sp.crown != null) {
+            if (night) {
+                // fireflies drift around the crown at night
+                paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.ADD));
+                for (int i = 0; i < 12; i++) {
+                    double fx = sp.crown[0] + (rc.next() - 0.5) * 620 * k, fy = sp.crown[1] + (rc.next() - 0.2) * 420 * k, fr = (5 + rc.next() * 4) * k;
+                    paint.setColor(0xff000000);
+                    paint.setShader(new RadialGradient((float) fx, (float) fy, (float) (fr * 4), 0xe6fff096, 0x00fff096, Shader.TileMode.CLAMP));
+                    c.drawRect((float) (fx - fr * 4), (float) (fy - fr * 4), (float) (fx + fr * 4), (float) (fy + fr * 4), paint);
+                    paint.setShader(null);
+                }
+                paint.setXfermode(null);
+            } else {
+                String[][] wings = { { "#f4a63a", "#7a3d12" }, { "#7fb6f0", "#21406e" }, { "#f07aa8", "#6e1f42" } };
+                for (int i = 0; i < 3; i++) {
+                    double bx = sp.crown[0] + (rc.next() - 0.5) * 560 * k, by = sp.crown[1] + (120 + rc.next() * 260) * k, tilt = (rc.next() - 0.5) * 0.9;
+                    drawButterfly(c, bx, by, s, tilt, lit(hex(wings[i][0])), lit(hex(wings[i][1])));
+                }
+            }
+        }
+        if (streak >= 3 && sp.bird1 != null) drawBird(c, sp.bird1[0], sp.bird1[1], s, sp.bird1[2], lit(hex("#3d4a63")), lit(hex("#f08a4b")));
+        if (streak >= 5 && sp.nest != null) drawNest(c, sp.nest[0], sp.nest[1] + 22 * k, s);
+        if (streak >= 5 && sp.bird2 != null) drawBird(c, sp.bird2[0], sp.bird2[1], s, sp.bird2[2], lit(hex("#5a4632")), lit(hex("#e8d3a8")));
+        if (streak >= 7 && sp.trunk != null && t > 0.25) {
+            drawSquirrel(c, sp.trunk[0] + sunSide * sp.trunk[2] * 0.85, sp.trunk[1], s, sunSide, lit(hex("#a0612f")), lit(hex("#e6c29a")));
+        }
+        if (streak >= 14) {
+            double rx = bx0 - 270 * sx;
+            drawRabbit(c, rx, hillY(rx, hillDx, W, k) + 4 * k, s, 1, lit(hex("#9b8a78")), lit(hex("#f2b6bf")));
+        }
+        if (streak >= 30) {
+            double px = bx0 + 270 * sx;
+            if (snow) drawFox(c, px, hillY(px, hillDx, W, k) + 4 * k, s, -1);
+            else drawPeacock(c, px, hillY(px, hillDx, W, k) + 4 * k, s, -1);
+        }
+    }
+
+    private void ell(Canvas c, double x, double y, double rx, double ry, double rot) {
+        c.save();
+        c.translate((float) x, (float) y);
+        c.rotate((float) Math.toDegrees(rot));
+        rect.set((float) -rx, (float) -ry, (float) rx, (float) ry);
+        c.drawOval(rect, paint);
+        c.restore();
+    }
+
+    private void dot(Canvas c, double x, double y, double r) { c.drawCircle((float) x, (float) y, (float) r, paint); }
+
+    private void tri(Canvas c, double ax, double ay, double bx, double by, double cx, double cy) {
+        path.reset();
+        path.moveTo((float) ax, (float) ay); path.lineTo((float) bx, (float) by); path.lineTo((float) cx, (float) cy);
+        path.close();
+        c.drawPath(path, paint);
+    }
+
+    private void fill(double[] col) { paint.setStyle(Paint.Style.FILL); paint.setColor(argb(col, 1)); }
+
+    private void legs(Canvas c, double[] col, double w, double x1, double y1a, double y1b, double x2, double y2a, double y2b) {
+        stroke(argb(col, 1), w);
+        path.reset();
+        path.moveTo((float) x1, (float) y1a); path.lineTo((float) x1, (float) y1b);
+        path.moveTo((float) x2, (float) y2a); path.lineTo((float) x2, (float) y2b);
+        c.drawPath(path, paint);
+        paint.setStyle(Paint.Style.FILL);
+    }
+
+    /* a bird perched with its feet at (x, y), facing dir (1 = right) */
+    private void drawBird(Canvas c, double x, double y, double s, double dir, double[] body, double[] chest) {
+        fill(body);
+        tri(c, x - dir * 10 * s, y - 10 * s, x - dir * 34 * s, y - 2 * s, x - dir * 30 * s, y - 13 * s);
+        ell(c, x, y - 14 * s, 17 * s, 11 * s, -dir * 0.3);
+        dot(c, x + dir * 13 * s, y - 25 * s, 8 * s);
+        fill(chest); ell(c, x + dir * 7 * s, y - 13 * s, 8 * s, 7 * s, 0);
+        fill(new double[] { 245, 178, 60 }); tri(c, x + dir * 20 * s, y - 27 * s, x + dir * 28 * s, y - 24 * s, x + dir * 20 * s, y - 22 * s);
+        paint.setColor(0xe614141e); dot(c, x + dir * 15 * s, y - 27 * s, 1.8 * s);
+        legs(c, new double[] { 70, 50, 35 }, 2 * s, x - 3 * s, y - 5 * s, y, x + 3 * s, y - 5 * s, y);
+    }
+
+    private void drawButterfly(Canvas c, double x, double y, double s, double tilt, double[] col, double[] spot) {
+        c.save();
+        c.translate((float) x, (float) y);
+        c.rotate((float) Math.toDegrees(tilt));
+        fill(col);
+        for (int side = -1; side <= 1; side += 2) {
+            ell(c, side * 8 * s, -5 * s, 9 * s, 7 * s, side * 0.5);
+            ell(c, side * 6 * s, 6 * s, 6 * s, 5 * s, -side * 0.4);
+        }
+        fill(spot);
+        dot(c, -9 * s, -6 * s, 2.2 * s); dot(c, 9 * s, -6 * s, 2.2 * s);
+        ell(c, 0, 0, 1.8 * s, 9 * s, 0);
+        c.restore();
+    }
+
+    /* a nest tucked under the leaves, with eggs peeping over the rim */
+    private void drawNest(Canvas c, double x, double y, double s) {
+        fill(lit(hex("#bfe3ef")));
+        dot(c, x - 8 * s, y - 6 * s, 6 * s); dot(c, x + 2 * s, y - 8 * s, 6 * s); dot(c, x + 11 * s, y - 5 * s, 6 * s);
+        fill(lit(hex("#7a5230"))); ell(c, x, y, 26 * s, 10 * s, 0);
+        stroke(argb(lit(hex("#4e321c")), 1), 2 * s);
+        for (int i = -2; i <= 2; i++) curve(c, x + i * 9 * s - 10 * s, y - 4 * s, x + i * 9 * s, y + 6 * s, x + i * 9 * s + 12 * s, y - 2 * s);
+        paint.setStyle(Paint.Style.FILL);
+    }
+
+    /* a squirrel clinging head-up to the trunk; the bushy tail curls out to the side */
+    private void drawSquirrel(Canvas c, double x, double y, double s, double dir, double[] fur, double[] belly) {
+        fill(scale(fur, 1.1));
+        dot(c, x + dir * 16 * s, y + 6 * s, 11 * s); dot(c, x + dir * 24 * s, y - 8 * s, 12 * s); dot(c, x + dir * 20 * s, y - 22 * s, 9 * s);
+        fill(fur);
+        ell(c, x, y, 9 * s, 17 * s, dir * 0.15);
+        dot(c, x - dir * 2 * s, y - 19 * s, 8 * s);
+        tri(c, x - dir * 1 * s, y - 25 * s, x + dir * 4 * s, y - 34 * s, x + dir * 6 * s, y - 24 * s);
+        fill(belly); ell(c, x - dir * 3 * s, y + 2 * s, 5 * s, 11 * s, 0);
+        fill(scale(fur, 0.8)); dot(c, x - dir * 8 * s, y - 6 * s, 3 * s); dot(c, x - dir * 8 * s, y + 10 * s, 3 * s);
+        paint.setColor(0xe614141e); dot(c, x - dir * 6 * s, y - 21 * s, 1.6 * s);
+    }
+
+    /* a rabbit sitting with its feet at (x, y) */
+    private void drawRabbit(Canvas c, double x, double y, double s, double dir, double[] fur, double[] inner) {
+        fill(fur);
+        ell(c, x, y - 14 * s, 22 * s, 15 * s, 0);
+        dot(c, x + dir * 18 * s, y - 28 * s, 10 * s);
+        ell(c, x + dir * 14 * s, y - 48 * s, 4 * s, 14 * s, -dir * 0.2);
+        ell(c, x + dir * 21 * s, y - 47 * s, 4 * s, 13 * s, dir * 0.15);
+        fill(inner); ell(c, x + dir * 14 * s, y - 48 * s, 2 * s, 10 * s, -dir * 0.2); dot(c, x + dir * 27 * s, y - 27 * s, 2 * s);
+        paint.setColor(0xf2fafafa); dot(c, x - dir * 21 * s, y - 16 * s, 6 * s);
+        paint.setColor(0xe614141e); dot(c, x + dir * 22 * s, y - 31 * s, 1.8 * s);
+    }
+
+    /* a peacock with its train fanned out behind it */
+    private void drawPeacock(Canvas c, double x, double y, double s, double dir) {
+        double cx = x - dir * 6 * s, cy = y - 34 * s, R = 70 * s;
+        fill(lit(hex("#3f8f55")));
+        path.reset();
+        path.moveTo((float) cx, (float) cy);
+        rect.set((float) (cx - R), (float) (cy - R), (float) (cx + R), (float) (cy + R));
+        path.arcTo(rect, 180, 180, false);
+        path.close();
+        c.drawPath(path, paint);
+        double[][] rings = { { 0.8, 9 }, { 0.5, 6 } };
+        for (double[] rg : rings) {
+            int n = (int) rg[1];
+            for (int i = 0; i < n; i++) {
+                double a = Math.PI + (i + 0.5) / n * Math.PI, ex = cx + Math.cos(a) * R * rg[0], ey = cy + Math.sin(a) * R * rg[0];
+                fill(lit(hex("#d8bf55"))); ell(c, ex, ey, 9 * s, 7 * s, a);
+                fill(lit(hex("#1f7f78"))); ell(c, ex, ey, 6 * s, 5 * s, a);
+                fill(lit(hex("#26408f"))); dot(c, ex, ey, 3 * s);
+            }
+        }
+        double[] blue = lit(hex("#1f5aa8"));
+        fill(blue);
+        ell(c, x, y - 18 * s, 14 * s, 18 * s, dir * 0.2);
+        stroke(argb(blue, 1), 8 * s);
+        curve(c, x + dir * 4 * s, y - 30 * s, x + dir * 2 * s, y - 44 * s, x + dir * 10 * s, y - 52 * s);
+        fill(blue);
+        dot(c, x + dir * 11 * s, y - 55 * s, 6 * s);
+        for (int i = -1; i <= 1; i++) {
+            stroke(argb(blue, 1), 1.5 * s);
+            path.reset(); path.moveTo((float) (x + dir * 11 * s), (float) (y - 60 * s)); path.lineTo((float) (x + dir * (11 + i * 4) * s), (float) (y - 70 * s));
+            c.drawPath(path, paint);
+            fill(blue); dot(c, x + dir * (11 + i * 4) * s, y - 71 * s, 2 * s);
+        }
+        fill(new double[] { 235, 190, 80 }); tri(c, x + dir * 16 * s, y - 56 * s, x + dir * 22 * s, y - 54 * s, x + dir * 16 * s, y - 52 * s);
+        legs(c, new double[] { 90, 70, 50 }, 2 * s, x - 4 * s, y - 2 * s, y + 4 * s, x + 4 * s, y - 2 * s, y + 4 * s);
+    }
+
+    /* a red fox for the snow scene */
+    private void drawFox(Canvas c, double x, double y, double s, double dir) {
+        double[] fur = lit(hex("#d8662a"));
+        fill(fur);
+        ell(c, x - dir * 30 * s, y - 14 * s, 20 * s, 8 * s, dir * 0.4);
+        fill(lit(hex("#ffffff"))); dot(c, x - dir * 47 * s, y - 20 * s, 6 * s);
+        fill(fur);
+        ell(c, x, y - 16 * s, 24 * s, 13 * s, 0);
+        dot(c, x + dir * 22 * s, y - 26 * s, 10 * s);
+        tri(c, x + dir * 28 * s, y - 30 * s, x + dir * 42 * s, y - 24 * s, x + dir * 28 * s, y - 20 * s);
+        tri(c, x + dir * 15 * s, y - 32 * s, x + dir * 18 * s, y - 44 * s, x + dir * 24 * s, y - 33 * s);
+        fill(lit(hex("#f6efe6"))); ell(c, x + dir * 12 * s, y - 12 * s, 8 * s, 6 * s, 0);
+        legs(c, lit(hex("#3a2418")), 3 * s, x - 12 * s, y - 6 * s, y + 2 * s, x + 12 * s, y - 6 * s, y + 2 * s);
+        paint.setColor(0xe614141e); dot(c, x + dir * 25 * s, y - 28 * s, 1.8 * s); dot(c, x + dir * 42 * s, y - 24 * s, 2 * s);
+    }
+
     /* pine: a straight trunk with tiers of jagged boughs; snow settles on the tiers in the snow scene */
-    private void drawPine(Canvas c, double tk, double bx0, double by0, double t, double[] trunk, double[][] leaf, boolean snowy, double sunSide, int seed) {
+    private Spots drawPine(Canvas c, double tk, double bx0, double by0, double t, double[] trunk, double[][] leaf, boolean snowy, double sunSide, int seed) {
+        ArrayList<double[]> perches = new ArrayList<>();
         int tiers = 4 + (int) Math.round(5 * t);
         double grow = 0.35 + 0.65 * t, H0 = 980 * tk * grow, w0 = 34 * tk;
         Rng rz = new Rng(seed * 7 + 3);
@@ -595,6 +830,7 @@ final class ArtRenderer {
             double u = i / (double) (tiers - 1), y = by0 - H0 * (0.18 + 0.8 * u), hw = (300 - 250 * u) * tk * grow, th = (190 - 80 * u) * tk * (0.5 + 0.5 * grow);
             double[][] pts = new double[9][];
             pts[0] = new double[] { bx0, y - th };
+            if (i == tiers / 3 || i == tiers / 2) perches.add(new double[] { bx0 + (i % 2 == 1 ? -1 : 1) * hw * 0.75, y - th * 0.05, i % 2 == 1 ? -1 : 1 });
             for (int q = 0; q <= 7; q++) pts[q + 1] = new double[] { bx0 - hw + q / 7.0 * hw * 2, y + (q % 2 == 1 ? -th * 0.18 : 0) + (rz.next() - 0.5) * 10 * tk };
             // dark whole tier, then the lit half and a narrower highlight on the sun's side
             for (int lc = 0; lc < 3; lc++) {
@@ -623,6 +859,12 @@ final class ArtRenderer {
                 c.drawPath(path, paint);
             }
         }
+        Spots sp = new Spots();
+        sp.bird1 = perches.size() > 0 ? perches.get(0) : null;
+        sp.bird2 = perches.size() > 1 ? perches.get(1) : null;
+        sp.trunk = new double[] { bx0, by0 - H0 * 0.1, w0 / 2 };
+        sp.crown = new double[] { bx0, by0 - H0 * 0.55 };
+        return sp;
     }
 
     private void drawLabel(Canvas c, int W, double k, Label l, double[][] leaf) {

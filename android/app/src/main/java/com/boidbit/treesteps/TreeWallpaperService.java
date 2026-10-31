@@ -54,6 +54,7 @@ public class TreeWallpaperService extends WallpaperService {
         private double gx;                             // filtered sideways gravity
         private double pageOffset = 0.5;
         private double par, targetPar;                 // parallax, -1.5..1.5
+        private int streak;                            // goal streak: which creatures live in the tree
 
         @Override
         public void onCreate(SurfaceHolder holder) {
@@ -64,6 +65,7 @@ public class TreeWallpaperService extends WallpaperService {
                 stepCounter = sensors.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
             }
             loadSettings();
+            VehicleWatch.register(TreeWallpaperService.this);
         }
 
         @Override
@@ -79,6 +81,7 @@ public class TreeWallpaperService extends WallpaperService {
                 loadSettings();
                 startSensors();
                 drawFrame();
+                if (realSteps && StepStore.healthSource(TreeWallpaperService.this)) refreshHealth();
                 if (!liveMode() && realSteps) refreshSteps();   // e.g. right after unlocking
                 handler.removeCallbacks(tick);
                 handler.postDelayed(tick, tickMs());
@@ -124,14 +127,15 @@ public class TreeWallpaperService extends WallpaperService {
             seed = StepStore.seed(c);
             design = StepStore.design(c);
             goal = StepStore.goal(c);
-            realSteps = StepStore.useRealSteps(c) && StepStore.hasPermission(c) && stepCounter != null;
+            realSteps = StepStore.useRealSteps(c) && StepStore.hasPermission(c) && (stepCounter != null || StepStore.healthSource(c));
             intervalMin = StepStore.prefs(c).getInt("interval_min", 15);
             tiltOn = StepStore.tilt(c);
             skyMode = StepStore.skyMode(c);
             labelStyle = StepStore.labelStyle(c);
             labelPos = StepStore.labelPos(c);
             labelSize = StepStore.labelSize(c);
-            steps = realSteps ? StepStore.lastKnown(c) : StepStore.manualSteps(c);
+            steps = realSteps ? StepStore.today(c) : StepStore.manualSteps(c);
+            streak = StepStore.streak(c);
             if (!tiltOn) gx = 0;
             updateTarget();
             par = targetPar;
@@ -141,6 +145,17 @@ public class TreeWallpaperService extends WallpaperService {
         private void refreshSteps() {
             StepStore.readOnce(TreeWallpaperService.this, (s, fresh) -> {
                 steps = s;
+                if (visible) drawFrame();
+            });
+        }
+
+        /** Health Connect as the step source: today's total from it (may be refused while the app is in the background). */
+        private void refreshHealth() {
+            Context c = TreeWallpaperService.this;
+            HealthSteps.today(c, n -> {
+                if (n < 0) return;
+                StepStore.recordHealth(c, n);
+                steps = StepStore.today(c);
                 if (visible) drawFrame();
             });
         }
@@ -203,8 +218,9 @@ public class TreeWallpaperService extends WallpaperService {
                 if (c != null) {
                     ArtRenderer.Label label = realSteps && !"off".equals(labelStyle)
                         ? new ArtRenderer.Label(labelStyle, labelPos, labelSize, steps, goal) : null;
-                    renderer.draw(c, width, height, seed, design, steps / (double) Math.max(1, goal), System.currentTimeMillis(),
-                        skyMode, par, label);
+                    long now = System.currentTimeMillis();
+                    renderer.draw(c, width, height, seed, design, steps / (double) Math.max(1, goal), now,
+                        skyMode, par, label, streak, realSteps ? StepStore.wilt(TreeWallpaperService.this, now) : 0);
                 }
             } catch (RuntimeException ignored) {
                 // surface went away mid-frame; the next visibility change redraws

@@ -6,4 +6,7 @@
     <string name="custom_url_scheme">com.boidbit.treesteps</string>
     <string name="wallpaper_description">A tree that grows with the steps you walk today, under the real sun and moon.</string>
     <string name="widget_description">Today\'s tree and steps</string>
+    <string name="widget_medium_description">Today\'s tree, steps, distance and calories</string>
+    <string name="widget_large_description">Today\'s tree, steps and your week</string>
+    <string name="widget_week_description">Steps for the last seven days</string>
 </resources>

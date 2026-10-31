@@ -49,17 +49,147 @@ final class StepStore {
         if (savedDay == null) {
             base = raw;                                     // first reading ever: count from now
         } else if (!day.equals(savedDay)) {
-            saveDay(p, savedDay, p.getInt("steps", 0));     // yesterday's total goes into the history
+            saveDay(p, savedDay, dayTotal(p, savedDay));    // yesterday's total goes into the history
             base = (last >= 0 && raw >= last) ? last : 0;   // new day (counter reset to 0 if the phone rebooted)
         } else if (last >= 0 && raw < last) {
             base = base - last;                             // rebooted today: keep the steps already walked
+        } else if (last >= 0 && inVehicle(c)) {
+            base += raw - last;                             // in a car, bus or on a bike: these "steps" don't count
         }
         int steps = (int) Math.max(0, raw - base);
         int before = day.equals(savedDay) ? p.getInt("steps", 0) : 0;
         SharedPreferences.Editor e = p.edit().putString("day", day).putLong("base", base).putLong("last", raw).putInt("steps", steps);
         addToHour(p, e, day, Math.max(0, steps - before));
+        noteMove(p, e, Math.max(0, steps - before));
         e.apply();
-        TreeWidget.stepsChanged(c, steps);
+        int shown = today(c);
+        TreeWidget.stepsChanged(c, shown);
+        return shown;
+    }
+
+    /* ---------- moving vehicles (see VehicleWatch) ---------- */
+
+    private static final long VEHICLE_MAX_MS = 4 * 3600_000L;   // a missed "left the vehicle" must not stop counting for good
+
+    static boolean ignoreVehicles(Context c) { return prefs(c).getBoolean("ignore_vehicle", true); }
+
+    static boolean inVehicle(Context c) {
+        SharedPreferences p = prefs(c);
+        return ignoreVehicles(c) && p.getBoolean("in_vehicle", false)
+            && System.currentTimeMillis() - p.getLong("vehicle_since", 0) < VEHICLE_MAX_MS;
+    }
+
+    static void setInVehicle(Context c, boolean on) {
+        prefs(c).edit().putBoolean("in_vehicle", on).putLong("vehicle_since", System.currentTimeMillis()).apply();
+    }
+
+    /* ---------- the thirsty tree: time since the last real walk ---------- */
+
+    private static final int MOVE_STEPS = 50;                   // steps within ten minutes that count as a walk
+    private static final long MOVE_WINDOW_MS = 10 * 60_000L;
+
+    private static void noteMove(SharedPreferences p, SharedPreferences.Editor e, int delta) {
+        if (delta <= 0) return;
+        long now = System.currentTimeMillis();
+        long start = p.getLong("move_start", 0);
+        int acc = p.getInt("move_acc", 0);
+        if (now - start > MOVE_WINDOW_MS) { start = now; acc = 0; }
+        acc += delta;
+        e.putLong("move_start", start).putInt("move_acc", acc);
+        if (acc >= MOVE_STEPS) e.putLong("last_move", now);
+    }
+
+    /**
+     * How wilted the tree looks, 0 to 1: nothing for two hours after a walk, then fully wilted two hours
+     * later. Only between 8 AM and 9 PM, only with real steps, and never once today's goal is reached.
+     */
+    static double wilt(Context c, long now) {
+        if (!useRealSteps(c) || !hasPermission(c) || today(c) >= goal(c)) return 0;
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        cal.setTimeInMillis(now);
+        int hour = cal.get(java.util.Calendar.HOUR_OF_DAY);
+        if (hour < 8 || hour >= 21) return 0;
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 8);
+        cal.set(java.util.Calendar.MINUTE, 0);
+        long since = Math.max(prefs(c).getLong("last_move", 0), cal.getTimeInMillis());
+        double idleMin = (now - since) / 60000.0;
+        return Math.max(0, Math.min(1, (idleMin - 120) / 120));
+    }
+
+    /** Days in a row the goal was reached: the finished days before today, plus today once it is reached. */
+    static int streak(Context c) {
+        int goal = goal(c);
+        java.util.Map<String, Integer> byDay = new java.util.HashMap<>();
+        for (String[] d : history(c)) {
+            try { byDay.put(d[0], Integer.parseInt(d[1])); } catch (NumberFormatException ignored) {}
+        }
+        int n = shownSteps(c) >= goal ? 1 : 0;
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        SimpleDateFormat f = new SimpleDateFormat("yyyyMMdd", Locale.US);
+        for (int i = 1; i < HISTORY_DAYS; i++) {
+            cal.add(java.util.Calendar.DATE, -1);
+            Integer s = byDay.get(f.format(cal.getTime()));
+            if (s != null && s >= goal) n++; else break;
+        }
+        return n;
+    }
+
+    /* ---------- Health Connect (see HealthSteps) ---------- */
+
+    /** phone (the step counter) | health (Health Connect, with the step counter filling in between reads) */
+    static boolean healthSource(Context c) { return "health".equals(prefs(c).getString("step_source", "phone")); }
+
+    /** Stores today's total from Health Connect; steps the counter sees after this are added on top until the next read. */
+    static synchronized void recordHealth(Context c, long total) {
+        prefs(c).edit().putString("hc_day", today()).putInt("hc_steps", (int) total).putInt("hc_sensor", lastKnown(c)).apply();
+        TreeWidget.stepsChanged(c, today(c));
+    }
+
+    /** Adds finished days from Health Connect to the history where they are higher than what the phone saved. */
+    static synchronized void mergeHistory(Context c, java.util.Map<String, Long> days) {
+        SharedPreferences p = prefs(c);
+        java.util.Map<String, String> byDay = new java.util.TreeMap<>(java.util.Collections.reverseOrder());
+        for (String e : p.getString("history", "").split(",")) {
+            int i = e.indexOf(':');
+            if (i > 0) byDay.put(e.substring(0, i), e);
+        }
+        String today = today();
+        String tail = ":" + goal(c) + ":" + design(c) + ":" + seed(c);
+        for (java.util.Map.Entry<String, Long> d : days.entrySet()) {
+            if (d.getKey().equals(today) || d.getValue() <= 0) continue;
+            String old = byDay.get(d.getKey());
+            String[] f = old == null ? null : old.split(":");
+            long had = 0;
+            try { if (f != null) had = Long.parseLong(f[1]); } catch (NumberFormatException ignored) {}
+            if (d.getValue() <= had) continue;
+            StringBuilder e = new StringBuilder(d.getKey()).append(':').append(d.getValue());
+            if (f != null && f.length > 2) for (int i = 2; i < f.length; i++) e.append(':').append(f[i]);
+            else e.append(tail);
+            byDay.put(d.getKey(), e.toString());
+        }
+        StringBuilder out = new StringBuilder();
+        int n = 0;
+        for (String e : byDay.values()) {
+            if (n++ >= HISTORY_DAYS) break;
+            if (out.length() > 0) out.append(',');
+            out.append(e);
+        }
+        p.edit().putString("history", out.toString()).apply();
+    }
+
+    /** Today's steps from the step counter, or from Health Connect plus what the counter saw since the last read. */
+    static int today(Context c) {
+        SharedPreferences p = prefs(c);
+        int sensor = lastKnown(c);
+        if (!healthSource(c) || !today().equals(p.getString("hc_day", null))) return sensor;
+        return p.getInt("hc_steps", 0) + Math.max(0, sensor - p.getInt("hc_sensor", 0));
+    }
+
+    /* yesterday's total for the history, from whichever source was in use */
+    private static int dayTotal(SharedPreferences p, String day) {
+        int steps = p.getInt("steps", 0);
+        if ("health".equals(p.getString("step_source", "phone")) && day.equals(p.getString("hc_day", null)))
+            steps = p.getInt("hc_steps", 0) + Math.max(0, steps - p.getInt("hc_sensor", 0));
         return steps;
     }
 
@@ -133,7 +263,7 @@ final class StepStore {
         final SensorManager sm = (SensorManager) c.getSystemService(Context.SENSOR_SERVICE);
         final Sensor sensor = sm == null ? null : sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
         if (sensor == null || !hasPermission(c)) {
-            main.post(() -> cb.onSteps(lastKnown(c), false));
+            main.post(() -> cb.onSteps(today(c), false));
             return;
         }
         final boolean[] done = { false };
@@ -142,7 +272,7 @@ final class StepStore {
             if (done[0]) return;
             done[0] = true;
             sm.unregisterListener(listener[0]);
-            cb.onSteps(lastKnown(c), false);
+            cb.onSteps(today(c), false);
         };
         listener[0] = new SensorEventListener() {
             @Override
@@ -189,6 +319,6 @@ final class StepStore {
     static int remindHour(Context c) { return prefs(c).getInt("remind_hour", 19); }
     /** Steps shown on the wallpaper and widget: real steps when allowed, otherwise the preview value. */
     static int shownSteps(Context c) {
-        return useRealSteps(c) && hasPermission(c) && hasStepSensor(c) ? lastKnown(c) : manualSteps(c);
+        return useRealSteps(c) && hasPermission(c) && (hasStepSensor(c) || healthSource(c)) ? today(c) : manualSteps(c);
     }
 }
