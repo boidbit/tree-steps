@@ -1,5 +1,10 @@
 name: Build APK
 
+# Every push to main builds the app and publishes it in Releases.
+# With the signing secrets set (TS_KEYSTORE_BASE64, TS_KEYSTORE_PASSWORD, and optionally TS_KEY_ALIAS and
+# TS_KEY_PASSWORD), the build is a signed release: an APK to install and an AAB to upload to Google Play.
+# Without them (pull requests, forks) it is a debug APK.
+
 on:
   push:
     branches: [main]
@@ -12,18 +17,21 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
+    env:
+      TS_VERSION_CODE: ${{ github.run_number }}
+      TS_VERSION_NAME: 0.1.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - name: Install dependencies
         run: npm ci
@@ -34,27 +42,47 @@ jobs:
       - name: Copy web files into the Android project
         run: npx cap sync android
 
-      - name: Build debug APK
+      - name: Build
+        id: build
         working-directory: android
+        env:
+          KEYSTORE_B64: ${{ secrets.TS_KEYSTORE_BASE64 }}
+          TS_KEYSTORE_PASSWORD: ${{ secrets.TS_KEYSTORE_PASSWORD }}
+          TS_KEY_ALIAS: ${{ secrets.TS_KEY_ALIAS }}
+          TS_KEY_PASSWORD: ${{ secrets.TS_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          mkdir -p ../dist
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            export TS_KEYSTORE="$RUNNER_TEMP/upload.jks"
+            ./gradlew assembleRelease bundleRelease --no-daemon
+            cp app/build/outputs/apk/release/app-release.apk "../dist/tree-steps-$TS_VERSION_NAME.apk"
+            cp app/build/outputs/bundle/release/app-release.aab "../dist/tree-steps-$TS_VERSION_NAME.aab"
+            rm -f "$RUNNER_TEMP/upload.jks"
+            echo "kind=signed" >> "$GITHUB_OUTPUT"
+          else
+            ./gradlew assembleDebug --no-daemon
+            cp app/build/outputs/apk/debug/app-debug.apk "../dist/tree-steps-$TS_VERSION_NAME-debug.apk"
+            echo "kind=debug" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Upload APK
+      - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: tree-steps-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: tree-steps-${{ env.TS_VERSION_NAME }}
+          path: dist/*
           if-no-files-found: error
 
       - name: Publish to Releases
         if: github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.${{ github.run_number }}
-          name: Tree Steps build ${{ github.run_number }}
+          tag_name: v${{ env.TS_VERSION_NAME }}
+          name: Tree Steps ${{ env.TS_VERSION_NAME }}
           body: |
-            Debug APK built from ${{ github.sha }}.
-            Download `app-debug.apk` below and install it on an Android phone.
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+            Built from ${{ github.sha }} (${{ steps.build.outputs.kind }} build, version code ${{ github.run_number }}).
+            - `.apk`: install it on an Android phone (Android 8.0 or newer).
+            - `.aab` (signed builds only): upload it to Google Play Console.
+          files: dist/*
           make_latest: true

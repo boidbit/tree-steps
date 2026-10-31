@@ -16,9 +16,13 @@ import androidx.core.app.NotificationManagerCompat;
 import java.text.NumberFormat;
 import java.util.Calendar;
 
-/** The evening reminder: once a day at the chosen hour, a nudge if today's goal isn't reached yet. */
+/**
+ * The evening reminder: once a day at the chosen hour, a nudge if today's goal isn't reached yet. Also a step
+ * reading just before midnight, so the evening's last steps count toward that day rather than the next.
+ */
 final class Reminders {
     static final String ACTION = "com.boidbit.treesteps.REMIND";
+    static final String DAY_END = "com.boidbit.treesteps.DAY_END";
     private static final String CHANNEL = "reminders";
     private static final int NOTIFICATION_ID = 1;
 
@@ -31,6 +35,7 @@ final class Reminders {
         PendingIntent pi = PendingIntent.getBroadcast(c, 7, new Intent(c, ReminderReceiver.class).setAction(ACTION),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         am.cancel(pi);
+        scheduleDayEnd(c, am);
         if (!StepStore.remindOn(c)) return;
         Calendar next = Calendar.getInstance();
         next.set(Calendar.HOUR_OF_DAY, StepStore.remindHour(c));
@@ -38,6 +43,20 @@ final class Reminders {
         next.set(Calendar.SECOND, 0);
         if (next.getTimeInMillis() <= System.currentTimeMillis()) next.add(Calendar.DAY_OF_MONTH, 1);
         am.setInexactRepeating(AlarmManager.RTC_WAKEUP, next.getTimeInMillis(), AlarmManager.INTERVAL_DAY, pi);
+    }
+
+    /* between 11:45 and 11:55 PM (Android allows a 10 minute window without the exact-alarm permission) */
+    private static void scheduleDayEnd(Context c, AlarmManager am) {
+        PendingIntent pi = PendingIntent.getBroadcast(c, 8, new Intent(c, ReminderReceiver.class).setAction(DAY_END),
+            PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        am.cancel(pi);
+        if (!StepStore.useRealSteps(c)) return;
+        Calendar next = Calendar.getInstance();
+        next.set(Calendar.HOUR_OF_DAY, 23);
+        next.set(Calendar.MINUTE, 45);
+        next.set(Calendar.SECOND, 0);
+        if (next.getTimeInMillis() <= System.currentTimeMillis()) next.add(Calendar.DAY_OF_MONTH, 1);
+        am.setWindow(AlarmManager.RTC_WAKEUP, next.getTimeInMillis(), 10 * 60_000L, pi);
     }
 
     static boolean canNotify(Context c) {

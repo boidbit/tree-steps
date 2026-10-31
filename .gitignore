@@ -3,3 +3,5 @@ www/
 *.apk
 *.jks
 *.keystore
+keystore-base64.txt
+TreeSteps-signing/

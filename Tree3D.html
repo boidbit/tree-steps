@@ -133,6 +133,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .dots { display: flex; gap: 6px; }
 .dots i { width: 8px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.25); transition: width .2s, background .2s; }
 .dots i.on { width: 22px; background: var(--accent); }
+.about button { background: none; border: 0; padding: 4px; color: var(--s-acc); font: inherit; font-weight: 650; text-decoration: underline; }
+.policy { display: block; width: 100%; max-width: 720px; margin: 0 auto; height: calc(100vh - 90px); border: 0; border-radius: 16px; background: #fff; }
 .choices { display: flex; flex-direction: column; gap: 10px; }
 .choice { display: flex; gap: 14px; align-items: center; width: 100%; padding: 14px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: var(--fg); text-align: left; }
 .choice > svg { flex: none; width: 30px; height: 30px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -249,7 +251,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     <div class="item"><span class="lab">Size</span><div class="seg" id="sizeSeg"></div></div>
   </div></div>
 
-  <p class="about">Tree Steps · your steps stay on your phone</p>
+  <p class="about">Tree Steps · your steps stay on your phone · <button id="openPrivacy" type="button">Privacy policy</button></p>
 </div>
 
 <div class="sheet" id="journey" hidden role="dialog" aria-label="Your journey">
@@ -289,6 +291,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     <button class="primary" id="obMain" type="button"></button>
     <button class="skip" id="obSkip" type="button"></button>
   </div>
+</div>
+
+<div class="sheet" id="privacy" hidden role="dialog" aria-label="Privacy policy">
+  <div class="sheethead"><h1>Privacy</h1><button class="done" id="closePrivacy" type="button">Done</button></div>
+  <iframe class="policy" id="policyFrame" title="Privacy policy"></iframe>
 </div>
 
 <div class="onboard place" id="place" hidden role="dialog" aria-label="Show on my phone">
@@ -842,6 +849,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   function openPlace() { buildChoices($('placeChoices'), closePlace); $('place').hidden = false; }
   function closePlace() { $('place').hidden = true; }
   $('closePlace').addEventListener('click', closePlace);
+  function openPrivacy() { $('policyFrame').src = 'privacy.html'; $('privacy').hidden = false; }
+  function closePrivacy() { $('privacy').hidden = true; }
+  $('openPrivacy').addEventListener('click', openPrivacy);
+  $('closePrivacy').addEventListener('click', closePrivacy);
   $('placeBtn').addEventListener('click', openPlace);
   function syncPlace() {
     $('wallState').textContent = wallActive ? 'On' : 'Off';
@@ -1166,6 +1177,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 
   /* Android back: close settings, 3D or the onboarding step first (true = handled) */
   window.treeBack = function () {
+    if (!$('privacy').hidden) { closePrivacy(); return true; }
     if (!$('place').hidden) { closePlace(); return true; }
     if (!$('journey').hidden) { closeJourney(); return true; }
     if (!$('settings').hidden) { closeSheet(); return true; }

@@ -76,6 +76,7 @@ public class TreeStepsPlugin extends Plugin {
         if (ok) e.putLong("last_move", System.currentTimeMillis());     // the tree starts out fresh, not thirsty
         e.apply();
         VehicleWatch.register(getContext());
+        Reminders.schedule(getContext());
         JSObject r = new JSObject();
         r.put("granted", ok);
         if (!ok) r.put("reason", "permission");

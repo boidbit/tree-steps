@@ -4,9 +4,10 @@ An illustrated tree that grows with the steps you walk, in the app and as a live
 
 - `Tree3D.html` — the app: today's steps over the illustrated tree, settings, first-run onboarding, and **3D** (drag to rotate, pinch to zoom)
 - `lib/art.js` — the illustrated renderer: six designs (scene × tree kind × colours), a seeded tree that grows with steps, the sun at its real position for the phone's time zone and the moon's phase at night; the wallpaper uses a Java port of it
-- `Seed Wallpapers.html` — the 2D seeded wallpaper generator
+- `Seed Wallpapers.html` — the 2D seeded wallpaper generator (not part of the app)
+- `docs/` — the website for GitHub Pages: `privacy.html` is the privacy policy (also bundled in the app, under Settings), `index.html` a small landing page
 - `lib/three.min.js`, `lib/OrbitControls.js` — Three.js for the 3D view, bundled so the app works offline
-- `store/icon-512.png` — the app icon for a store listing
+- `store/` — the Google Play listing: `PLAY_STORE.md` (step-by-step guide, listing text, Data safety answers), `icon-512.png`, `feature-graphic-1024x500.png`, `screenshots/`
 - `android/` — the Capacitor Android project, with the native parts in `app/src/main/java/com/boidbit/treesteps/`:
   - `TreeStepsPlugin` — real steps, Health Connect, settings, widgets and opening the live wallpaper picker, called from `Tree3D.html`
   - `StepStore` — turns the phone's step counter (or Health Connect) into "steps today", leaves out steps in vehicles, keeps the history, today's hours, the goal streak and the time since the last walk, and stores the settings the wallpaper reads
@@ -52,9 +53,14 @@ Steps count from the first time you turn them on; Android's step counter cannot 
 
 ## Get the APK
 
-Every push to `main` builds a debug APK and publishes it in the repo's **Releases** tab (newest build on top, file `app-debug.apk`). It is also kept as a `tree-steps-debug-apk` artifact on the run in the **Actions** tab. You can start a build by hand with **Run workflow**.
+Every push to `main` builds the app and publishes it in the repo's **Releases** tab (newest on top). It is also kept as an artifact on the run in the **Actions** tab. You can start a build by hand with **Run workflow**.
 
-Installing it means allowing "install unknown apps" for your browser or file manager. It is a debug build, not signed for the Play Store. It needs Android 8.0 or newer.
+- With the signing secrets set in the repo (`TS_KEYSTORE_BASE64`, `TS_KEYSTORE_PASSWORD`; see `store/PLAY_STORE.md`), a build is a signed release: `tree-steps-0.1.N.apk` to install and `tree-steps-0.1.N.aab` to upload to Google Play. The version code is the build number, so each build can be uploaded.
+- Without them (pull requests, forks), it is `tree-steps-0.1.N-debug.apk`.
+
+The signing key never goes in the repo. Gradle reads it from the `TS_KEYSTORE` environment variable (a path), with `TS_KEYSTORE_PASSWORD`, `TS_KEY_ALIAS` (default `upload`) and `TS_KEY_PASSWORD` (defaults to the keystore password).
+
+Installing the APK means allowing "install unknown apps" for your browser or file manager. It needs Android 8.0 or newer and targets Android 16 (API 36). The project uses Capacitor 8, which needs JDK 21 to build. A signed APK can't update a debug install, or the other way round: uninstall first.
 
 ## Try it in a browser
 
