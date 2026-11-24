@@ -41,16 +41,23 @@ final class StepStore {
     /** Records a raw step-counter reading and returns today's steps. */
     static synchronized int record(Context c, float rawValue) {
         long raw = (long) rawValue;
+        long now = System.currentTimeMillis();
         SharedPreferences p = prefs(c);
         String day = today();
         String savedDay = p.getString("day", null);
         long last = p.getLong("last", -1);
         long base = p.getLong("base", raw);
+        boolean newDay = savedDay != null && !day.equals(savedDay);
         if (savedDay == null) {
             base = raw;                                     // first reading ever: count from now
-        } else if (!day.equals(savedDay)) {
-            saveDay(p, savedDay, dayTotal(p, savedDay));    // yesterday's total goes into the history
-            base = (last >= 0 && raw >= last) ? last : 0;   // new day (counter reset to 0 if the phone rebooted)
+        } else if (newDay) {
+            long[] split = splitAtMidnight(p, raw, last, now);
+            base = split[0];
+            // the part of the gap that was walked before midnight belongs to the day that ended
+            // (Health Connect already has its own total for that day)
+            boolean health = "health".equals(p.getString("step_source", "phone"));
+            int extra = !health && yesterday().equals(savedDay) ? (int) split[1] : 0;
+            saveDay(p, savedDay, dayTotal(p, savedDay) + extra);
         } else if (last >= 0 && raw < last) {
             base = base - last;                             // rebooted today: keep the steps already walked
         } else if (last >= 0 && inVehicle(c)) {
@@ -58,13 +65,58 @@ final class StepStore {
         }
         int steps = (int) Math.max(0, raw - base);
         int before = day.equals(savedDay) ? p.getInt("steps", 0) : 0;
-        SharedPreferences.Editor e = p.edit().putString("day", day).putLong("base", base).putLong("last", raw).putInt("steps", steps);
+        SharedPreferences.Editor e = p.edit().putString("day", day).putLong("base", base).putLong("last", raw)
+            .putLong("last_at", now).putInt("steps", steps);
+        // Health Connect read today before this first reading of the day: the counter's steps so far are already in it
+        if (newDay && day.equals(p.getString("hc_day", null))) e.putInt("hc_sensor", steps);
         addToHour(p, e, day, Math.max(0, steps - before));
         noteMove(p, e, Math.max(0, steps - before));
         e.apply();
         int shown = today(c);
         TreeWidget.stepsChanged(c, shown);
         return shown;
+    }
+
+    private static final long LATE_MS = 30 * 60_000L;       // a reading this close to midnight closes the day exactly
+
+    /**
+     * The first reading of a new day: the counter only tells us the steps since the last reading (or since a reboot),
+     * not when they were walked. Returns {base for today, steps that belong to the day that ended}.
+     * Steps from yesterday must not show up as today's, so an unknown gap is only partly given to today.
+     */
+    private static long[] splitAtMidnight(SharedPreferences p, long raw, long last, long now) {
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        cal.setTimeInMillis(now);
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        cal.set(java.util.Calendar.MINUTE, 0);
+        cal.set(java.util.Calendar.SECOND, 0);
+        cal.set(java.util.Calendar.MILLISECOND, 0);
+        long midnight = cal.getTimeInMillis();
+        long fromRaw, fromAt;                               // the last point where the counter and the time are both known
+        if (last >= 0 && raw >= last) {
+            fromRaw = last;
+            fromAt = p.getLong("last_at", 0);
+        } else {                                            // rebooted since: the counter started at 0 when the phone booted
+            fromRaw = 0;
+            fromAt = now - android.os.SystemClock.elapsedRealtime();
+        }
+        long gap = raw - fromRaw;
+        if (fromAt >= midnight - LATE_MS) {                 // read just before midnight (or booted after it): all of it is today's
+            return new long[] { fromRaw, 0 };
+        }
+        if (fromAt <= 0 || now - midnight <= 60 * 60_000L) {
+            return new long[] { raw, gap };                 // unknown start, or barely past midnight: the gap is yesterday's
+        }
+        // no reading near midnight (phone off, alarm missed): share the gap by time on each side of midnight
+        double todayShare = (double) (now - midnight) / (now - fromAt);
+        long mine = Math.round(gap * todayShare);
+        return new long[] { raw - mine, gap - mine };
+    }
+
+    private static String yesterday() {
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        cal.add(java.util.Calendar.DATE, -1);
+        return new SimpleDateFormat("yyyyMMdd", Locale.US).format(cal.getTime());
     }
 
     /* ---------- moving vehicles (see VehicleWatch) ---------- */

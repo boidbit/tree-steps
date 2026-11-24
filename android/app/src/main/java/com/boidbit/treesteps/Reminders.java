@@ -45,7 +45,7 @@ final class Reminders {
         am.setInexactRepeating(AlarmManager.RTC_WAKEUP, next.getTimeInMillis(), AlarmManager.INTERVAL_DAY, pi);
     }
 
-    /* between 11:45 and 11:55 PM (Android allows a 10 minute window without the exact-alarm permission) */
+    /* around 11:50 PM; allowed while the phone dozes, so the day's last steps are read before midnight */
     private static void scheduleDayEnd(Context c, AlarmManager am) {
         PendingIntent pi = PendingIntent.getBroadcast(c, 8, new Intent(c, ReminderReceiver.class).setAction(DAY_END),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
@@ -53,10 +53,10 @@ final class Reminders {
         if (!StepStore.useRealSteps(c)) return;
         Calendar next = Calendar.getInstance();
         next.set(Calendar.HOUR_OF_DAY, 23);
-        next.set(Calendar.MINUTE, 45);
+        next.set(Calendar.MINUTE, 50);
         next.set(Calendar.SECOND, 0);
         if (next.getTimeInMillis() <= System.currentTimeMillis()) next.add(Calendar.DAY_OF_MONTH, 1);
-        am.setWindow(AlarmManager.RTC_WAKEUP, next.getTimeInMillis(), 10 * 60_000L, pi);
+        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next.getTimeInMillis(), pi);
     }
 
     static boolean canNotify(Context c) {
